@@ -13,6 +13,8 @@ from database.models import db_start
 
 load_dotenv()
 
+#Прием, Ислам!
+
 session = AiohttpSession(proxy="socks5://127.0.0.1:12334")
 bot = Bot(token=os.getenv('TOKEN'), default=DefaultBotProperties(parse_mode=ParseMode.HTML), session=session)
 dp = Dispatcher()
