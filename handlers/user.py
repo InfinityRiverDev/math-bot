@@ -509,7 +509,7 @@ from aiogram.fsm.state import State, StatesGroup
 from aiogram.types import Message, CallbackQuery
 
 import keyboards.user_kb as kb
-from handlers.admin import is_admin
+from handlers.admin import ADMIN_IDS
 from services.calculator import solve_math, solve_from_image
 from database.models import register_user
 
@@ -526,36 +526,94 @@ class CalculatorStates(StatesGroup):
 # Стартовые команды
 # ========================
 
-ADMIN_ID = int(os.getenv("ADMIN_ID"))
+# @router.message(CommandStart())
+# async def cmd_start(message: Message, state: FSMContext):
+#     # 1. Логика отмены текущих задач
+#     data = await state.get_data()
+#     task = data.get("current_task")
+#     if task and not task.done():
+#         task.cancel()
+#         try:
+#             await task
+#         except asyncio.CancelledError:
+#             pass
+#
+#     # 2. Сохранение пользователя в БД
+#     user_id = message.from_user.id
+#     username = message.from_user.username or "NoUsername"
+#     await register_user(user_id, username)
+#
+#     # 3. ПРОВЕРКА НА АДМИНА (Критически важно!)
+#     # Мы создаем локальную переменную is_user_admin для этого конкретного сообщения
+#     is_user_admin = (user_id == ADMIN_ID)
+#
+#     # 4. Очистка состояния и ответ
+#     await state.clear()
+#     await message.answer(
+#         '<b>Привет! Я математический бот Math Tutor 🤖</b>\n'
+#         'Я могу помочь тебе разобраться в математике здесь и сейчас, сделать из тебя гуру математического анализа,'
+#         ' дать почитать прошедшие лекции и не это еще не все 😉\n\n'
+#         'Выбери нужный раздел:',
+#         reply_markup=kb.get_start_kb(is_user_admin), # Передаем результат проверки
+#         parse_mode='HTML'
+#     )
 
-@router.message(CommandStart())
-async def cmd_start(message: Message, state: FSMContext):
-    # 1. Логика отмены текущих задач
-    data = await state.get_data()
-    task = data.get("current_task")
-    if task and not task.done():
-        task.cancel()
-        try:
-            await task
-        except asyncio.CancelledError:
-            pass
 
-    # 2. Сохранение пользователя в БД
-    user_id = message.from_user.id
-    username = message.from_user.username or "NoUsername"
-    await register_user(user_id, username)
+# ========================
+# ИИ
+# ========================
 
-    # 3. ПРОВЕРКА НА АДМИНА (Критически важно!)
-    # Мы создаем локальную переменную is_user_admin для этого конкретного сообщения
-    is_user_admin = (user_id == ADMIN_ID)
+@router.callback_query(F.data == 'ai')
+async def cmd_ai(callback: CallbackQuery):
+    await callback.answer()
+    await callback.message.edit_text('<b>Ты попал в раздел ИИ.</b>\nВыбери что хочешь сделать:',
+                            reply_markup=kb.ai,
+                            parse_mode='HTML')
 
-    # 4. Очистка состояния и ответ
-    await state.clear()
-    await message.answer(
-        'Привет! Я математический бот 🤖\nВыбери что хочешь сделать:',
-        reply_markup=kb.get_start_kb(is_user_admin), # Передаем результат проверки
-        parse_mode='HTML'
-    )
+
+# ========================
+# Лекции
+# ========================
+
+@router.callback_query(F.data == 'lectures')
+async def cmd_lectures(callback: CallbackQuery):
+    await callback.answer()
+    await callback.message.edit_text('<b>Ты попал в раздел Лекции.</b>\nВыбери что хочешь сделать:',
+                                     reply_markup=kb.lectures,
+                                     parse_mode='HTML')
+
+
+# ========================
+# Услуги
+# ========================
+
+@router.callback_query(F.data == 'services')
+async def cmd_services(callback: CallbackQuery):
+    await callback.answer()
+    await callback.message.edit_text('<b>Ты попал в раздел Услуги.</b>\nВыбери что хочешь сделать:',
+                                     reply_markup=kb.services,
+                                     parse_mode='HTML')
+
+
+# ========================
+# Профиль
+# ========================
+
+@router.callback_query(F.data == 'profile')
+async def cmd_profile(callback: CallbackQuery):
+    await callback.answer()
+    await callback.message.edit_text('<b>Ты попал в раздел Профиль.</b>\nВыбери что хочешь сделать:',
+                                     reply_markup=kb.profile,
+                                     parse_mode='HTML')
+
+
+# ========================
+# Поддержка
+# ========================
+#
+# @router.callback_query(F.data == 'profile')
+# async def cmd_profile(callback: CallbackQuery):
+#     await callback.answer()
 
 
 # ========================
@@ -576,7 +634,7 @@ async def cmd_cancel(message: Message, state: FSMContext):
     await state.clear()
     await message.answer(
         f'⛔ Остановлено.\nВернулся в главное меню 👇',
-        reply_markup=kb.get_start_kb(is_admin)
+        reply_markup=kb.get_start_kb(message.from_user.id in ADMIN_IDS)
     )
 
 
