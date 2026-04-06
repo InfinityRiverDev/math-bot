@@ -9,6 +9,7 @@ from aiogram.types import Message, CallbackQuery, InlineKeyboardMarkup, InlineKe
 from database.models import is_registered, register_user_full
 import keyboards.user_kb as kb
 from services.links import federal_law_152_fz
+from handlers.admin import ADMIN_IDS
 
 router = Router()
 
@@ -20,15 +21,79 @@ INSTITUTES = ["ИУАИТ", "ИХТИ", "ИУИ", "ИП", "ИНХН", "ИХНМ"
 # ========================
 
 class RegStates(StatesGroup):
-    first_name = State()
-    last_name = State()
-    institute = State()
-    group = State()
     knrtu_login = State()
     knrtu_password = State()
     policy = State()
     confirm = State()
 
+
+import aiohttp
+#проверка пароля и логина
+async def check_knrtu_auth(login: str, password: str) -> bool:
+    url = "https://rest.kstu.ru/restapi/login/"
+
+    try:
+        async with aiohttp.ClientSession() as session:
+            async with session.post(
+                url,
+                json={
+                    "username": login,
+                    "password": password
+                },
+                headers={
+                    "accept": "*/*",
+                    "accept-language": "ru,en;q=0.9",
+                    "content-type": "application/json",
+                    "Referer": "https://one.kstu.ru/",
+                    "origin": "https://one.kstu.ru"
+                }
+            ) as resp:
+
+                data = await resp.json()
+                print("KSTU RESPONSE:", data)
+
+                token = data.get("token") or data.get("access")
+                return token
+
+    except Exception as e:
+        print("KSTU AUTH ERROR:", e)
+        return False
+    
+
+async def get_knrtu_profile(token: str):
+    url = "https://rest.kstu.ru/restapi/my-profile/"
+
+    try:
+        async with aiohttp.ClientSession() as session:
+            async with session.get(
+                url,
+                headers={
+                    "authorization": f"Token {token}"
+                }
+            ) as resp:
+
+                data = await resp.json()
+                print("PROFILE DATA:", data)
+
+                first_name = data.get("name")
+                last_name = data.get("surname")
+                group = data.get("role", {}).get("student_desc", {}).get("group")
+
+                return first_name, last_name, group
+
+    except Exception as e:
+        print("PROFILE ERROR:", e)
+        return None, None, None
+    
+def get_institute_from_group(group: str) -> str:
+    if not group:
+        return "Неизвестно"
+
+    try:
+        index = int(group[0]) - 1
+        return INSTITUTES[index]
+    except:
+        return "Неизвестно"
 
 # ========================
 # Клавиатуры
@@ -81,19 +146,17 @@ def hash_password(password: str) -> str:
 @router.message(CommandStart())
 async def cmd_start(message: Message, state: FSMContext):
     user_id = message.from_user.id
-    admin_id = None
-    try:
-        import os
-        admin_id = int(os.getenv("ADMIN_ID", 0))
-    except:
-        pass
+
+    await message.answer_sticker(
+        sticker="CAACAgIAAxkBAAFGiSNp0wHNqj0qnak00qEBwayIjgz6sQACjqIAAnjAkUoNk2wSUaJW9jsE"
+    )
 
     already = await is_registered(user_id)
 
     if already:
         # Уже зарегистрирован — показываем главное меню
         await state.clear()
-        is_admin = (user_id == admin_id)
+        is_admin = user_id in ADMIN_IDS
         await message.answer(
             'Привет! Я математический бот 🤖\nВыбери что хочешь сделать:',
             reply_markup=kb.get_start_kb(is_admin),
@@ -102,170 +165,17 @@ async def cmd_start(message: Message, state: FSMContext):
     else:
         # Первый раз — запускаем регистрацию
         await state.clear()
-        await state.set_state(RegStates.first_name)
+        await state.set_state(RegStates.knrtu_login)
+
         await message.answer(
             "👋 <b>Добро пожаловать!</b>\n\n"
-            "Прежде чем начать, нужно пройти быструю регистрацию.\n\n"
-            "<b>Шаг 1 из 6</b> — Введите ваше <b>имя</b>:",
+            "Введите ваш <b>логин от КНИТУ ONE</b>:",
             parse_mode='HTML'
         )
 
 
 # ========================
-# Шаг 1 — Имя
-# ========================
-
-@router.message(RegStates.first_name, F.text)
-async def reg_first_name(message: Message, state: FSMContext):
-    name = message.text.strip()
-    if len(name) < 2:
-        await message.answer("❌ Имя слишком короткое. Попробуйте снова:")
-        return
-    await state.update_data(first_name=name)
-    await message.answer(
-        f"Вы ввели имя: <b>{name}</b>",
-        reply_markup=get_check_kb("first_name"),
-        parse_mode='HTML'
-    )
-
-
-@router.callback_query(F.data == "check_ok_first_name", RegStates.first_name)
-async def check_ok_first_name(callback: CallbackQuery, state: FSMContext):
-    await callback.answer()
-    await state.set_state(RegStates.last_name)
-    await callback.message.edit_text(
-        "<b>Шаг 2 из 6</b> — Введите вашу <b>фамилию</b>:",
-        parse_mode='HTML'
-    )
-
-
-@router.callback_query(F.data == "check_edit_first_name", RegStates.first_name)
-async def check_edit_first_name(callback: CallbackQuery, state: FSMContext):
-    await callback.answer()
-    await callback.message.edit_text(
-        "<b>Шаг 1 из 6</b> — Введите ваше <b>имя</b> снова:",
-        parse_mode='HTML'
-    )
-
-
-# ========================
-# Шаг 2 — Фамилия
-# ========================
-
-@router.message(RegStates.last_name, F.text)
-async def reg_last_name(message: Message, state: FSMContext):
-    name = message.text.strip()
-    if len(name) < 2:
-        await message.answer("❌ Фамилия слишком короткая. Попробуйте снова:")
-        return
-    await state.update_data(last_name=name)
-    await message.answer(
-        f"Вы ввели фамилию: <b>{name}</b>",
-        reply_markup=get_check_kb("last_name"),
-        parse_mode='HTML'
-    )
-
-
-@router.callback_query(F.data == "check_ok_last_name", RegStates.last_name)
-async def check_ok_last_name(callback: CallbackQuery, state: FSMContext):
-    await callback.answer()
-    await state.set_state(RegStates.institute)
-    await callback.message.edit_text(
-        "<b>Шаг 3 из 6</b> — Выберите ваш <b>институт</b>:",
-        reply_markup=get_institute_kb(),
-        parse_mode='HTML'
-    )
-
-
-@router.callback_query(F.data == "check_edit_last_name", RegStates.last_name)
-async def check_edit_last_name(callback: CallbackQuery, state: FSMContext):
-    await callback.answer()
-    await callback.message.edit_text(
-        "<b>Шаг 2 из 6</b> — Введите вашу <b>фамилию</b> снова:",
-        parse_mode='HTML'
-    )
-
-
-# ========================
-# Шаг 3 — Институт
-# ========================
-
-@router.callback_query(F.data.startswith("inst_"), RegStates.institute)
-async def reg_institute(callback: CallbackQuery, state: FSMContext):
-    inst = callback.data.replace("inst_", "")
-    await state.update_data(institute=inst)
-    await callback.answer()
-    await callback.message.edit_text(
-        f"Вы выбрали институт: <b>{inst}</b>",
-        reply_markup=get_check_kb("institute"),
-        parse_mode='HTML'
-    )
-
-
-@router.callback_query(F.data == "check_ok_institute", RegStates.institute)
-async def check_ok_institute(callback: CallbackQuery, state: FSMContext):
-    await callback.answer()
-    await state.set_state(RegStates.group)
-    await callback.message.edit_text(
-        "<b>Шаг 4 из 6</b> — Введите ваш <b>номер группы</b>\n"
-        "<i>Например: 151-24</i>",
-        parse_mode='HTML'
-    )
-
-
-@router.callback_query(F.data == "check_edit_institute", RegStates.institute)
-async def check_edit_institute(callback: CallbackQuery, state: FSMContext):
-    await callback.answer()
-    await callback.message.edit_text(
-        "<b>Шаг 3 из 6</b> — Выберите ваш <b>институт</b> снова:",
-        reply_markup=get_institute_kb(),
-        parse_mode='HTML'
-    )
-
-
-# ========================
-# Шаг 4 — Группа
-# ========================
-
-@router.message(RegStates.group, F.text)
-async def reg_group(message: Message, state: FSMContext):
-    group = message.text.strip()
-    if not re.match(r'^\d{3}-\d{2}$', group):
-        await message.answer(
-            "❌ Неверный формат. Введите номер группы в формате <code>151-24</code>:",
-            parse_mode='HTML'
-        )
-        return
-    await state.update_data(group=group)
-    await message.answer(
-        f"Вы ввели группу: <b>{group}</b>",
-        reply_markup=get_check_kb("group"),
-        parse_mode='HTML'
-    )
-
-
-@router.callback_query(F.data == "check_ok_group", RegStates.group)
-async def check_ok_group(callback: CallbackQuery, state: FSMContext):
-    await callback.answer()
-    await state.set_state(RegStates.knrtu_login)
-    await callback.message.edit_text(
-        "<b>Шаг 5 из 6</b> — Введите ваш <b>логин от КНИТУ ONE</b>:",
-        parse_mode='HTML'
-    )
-
-
-@router.callback_query(F.data == "check_edit_group", RegStates.group)
-async def check_edit_group(callback: CallbackQuery, state: FSMContext):
-    await callback.answer()
-    await callback.message.edit_text(
-        "<b>Шаг 4 из 6</b> — Введите ваш <b>номер группы</b> снова\n"
-        "<i>Например: 151-24</i>",
-        parse_mode='HTML'
-    )
-
-
-# ========================
-# Шаг 5 — Логин КНИТУ ONE
+# Шаг 1 — Логин КНИТУ ONE
 # ========================
 
 @router.message(RegStates.knrtu_login, F.text)
@@ -287,7 +197,7 @@ async def check_ok_login(callback: CallbackQuery, state: FSMContext):
     await callback.answer()
     await state.set_state(RegStates.knrtu_password)
     await callback.message.edit_text(
-        "<b>Шаг 6 из 6</b> — Введите ваш <b>пароль от КНИТУ ONE</b>:\n\n"
+        "Введите ваш <b>пароль от КНИТУ ONE</b>:\n\n"
         "<i>⚠️ Пароль будет сохранён в зашифрованном виде.\nОн используется только для авторизации и не передаётся третьим лицам</i>",
         parse_mode='HTML'
     )
@@ -297,7 +207,7 @@ async def check_ok_login(callback: CallbackQuery, state: FSMContext):
 async def check_edit_login(callback: CallbackQuery, state: FSMContext):
     await callback.answer()
     await callback.message.edit_text(
-        "<b>Шаг 5 из 6</b> — Введите ваш <b>логин от КНИТУ ONE</b> снова:",
+        "Введите ваш <b>логин от КНИТУ ONE</b> снова:",
         parse_mode='HTML'
     )
 
@@ -309,29 +219,55 @@ async def check_edit_login(callback: CallbackQuery, state: FSMContext):
 @router.message(RegStates.knrtu_password, F.text)
 async def reg_password(message: Message, state: FSMContext):
     password = message.text.strip()
+
     if len(password) < 4:
-        await message.answer("❌ Пароль слишком короткий. Попробуйте снова:")
+        await message.answer("❌ Пароль слишком короткий.")
         return
 
-    # Удаляем сообщение с паролем из чата для безопасности
+    data = await state.get_data()
+    login = data.get("knrtu_login")
+
+    msg = await message.answer("🔐 Проверяю данные КНИТУ...")
+
+    token = await check_knrtu_auth(login, password)
+
+    if not token:
+        await msg.delete()
+        await message.answer_sticker(
+            sticker="CAACAgIAAxkBAAFGiS9p0wKb1Ara3VWQRrIKk8YfMYmKZgACZJcAA-WQSimWYJy9_vw3OwQ"
+        )
+        await message.answer("❌ Неверный логин или пароль. \nПопробуйте снова:")
+        return
+
+    await msg.edit_text("🔍 Ищу вашу группу...")
+
+    first_name, last_name, group = await get_knrtu_profile(token)
+
+    if not group:
+        await msg.edit_text("❌ Не удалось получить данные профиля.")
+        return
+
+    institute = get_institute_from_group(group)
+
+    # удаляем пароль из чата
     try:
         await message.delete()
     except:
         pass
 
-    await state.update_data(knrtu_password=password)
-    await message.answer(
-        f"Пароль введён: {password}",
-        reply_markup=get_check_kb("knrtu_password"),
-        parse_mode='HTML'
+    # сохраняем всё
+    await state.update_data(
+        knrtu_password=password,
+        group=group,
+        first_name=first_name,
+        last_name=last_name,
+        institute=institute
     )
 
-
-@router.callback_query(F.data == "check_ok_knrtu_password", RegStates.knrtu_password)
-async def check_ok_password(callback: CallbackQuery, state: FSMContext):
-    await callback.answer()
+    # дальше сразу подтверждение
     await state.set_state(RegStates.policy)
-    await callback.message.edit_text(
+
+    await message.answer(
         "📋 <b>Политика обработки персональных данных.</b>\n\n"
         "Нажимая «Согласен», вы даёте согласие на обработку ваших персональных данных "
         f"в соответствии с {federal_law_152_fz} "
@@ -370,17 +306,16 @@ async def policy_disagree(callback: CallbackQuery, state: FSMContext):
 @router.callback_query(F.data == "policy_agree", RegStates.policy)
 async def policy_agree(callback: CallbackQuery, state: FSMContext):
     await callback.answer()
+
     await state.set_state(RegStates.confirm)
     data = await state.get_data()
 
     await callback.message.edit_text(
-        "📝 <b>Проверьте введённые данные:</b>\n\n"
-        f"👤 <b>Имя:</b> {data.get('first_name')}\n"
-        f"👤 <b>Фамилия:</b> {data.get('last_name')}\n"
-        f"🏛 <b>Институт:</b> {data.get('institute')}\n"
-        f"📚 <b>Группа:</b> {data.get('group')}\n"
-        f"🔑 <b>Логин КНИТУ ONE:</b> {data.get('knrtu_login')}\n"
-        f"🔒 <b>Пароль:</b> {data.get('knrtu_password')}\n\n"
+        "📝 <b>Проверьте данные:</b>\n\n"
+        f"👤 {data.get('first_name')} {data.get('last_name')}\n"
+        f"🏛 {data.get('institute')}\n"
+        f"📚 {data.get('group')}\n"
+        f"🔑 {data.get('knrtu_login')}\n\n"
         "Всё верно?",
         reply_markup=get_confirm_kb(),
         parse_mode='HTML'
@@ -395,7 +330,6 @@ async def policy_agree(callback: CallbackQuery, state: FSMContext):
 async def reg_edit(callback: CallbackQuery, state: FSMContext):
     await callback.answer()
     await state.clear()
-    await state.set_state(RegStates.first_name)
     await callback.message.edit_text(
         "🔄 <b>Начинаем регистрацию заново.</b>\n\n"
         "<b>Шаг 1 из 6</b> — Введите ваше <b>имя</b>:",
@@ -426,12 +360,8 @@ async def reg_confirm(callback: CallbackQuery, state: FSMContext):
 
     await state.clear()
 
-    import os
-    try:
-        admin_id = int(os.getenv("ADMIN_ID", 0))
-    except:
-        admin_id = 0
-    is_admin = (user_id == admin_id)
+    from handlers.admin import ADMIN_IDS
+    is_admin = user_id in ADMIN_IDS
 
     await callback.message.edit_text(
         "🎉 <b>Регистрация успешно завершена!</b>\n\n"

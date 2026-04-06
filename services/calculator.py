@@ -1,15 +1,28 @@
-import asyncio
-import base64
+# =========================
+# 📦 Импорты
+# =========================
 import os
+import re
+import base64
+import asyncio
 import aiohttp
-from yandex_ai_studio_sdk import AIStudio
-from dotenv import load_dotenv
 
+from dotenv import load_dotenv
+from yandex_ai_studio_sdk import AIStudio
+
+
+# =========================
+# 🔐 Конфиг (ENV)
+# =========================
 load_dotenv()
 
 YANDEX_API_KEY = os.getenv("YANDEX_API_KEY")
 YANDEX_FOLDER_ID = os.getenv("YANDEX_FOLDER_ID")
 
+
+# =========================
+# 🧠 SYSTEM PROMPT (ядро логики)
+# =========================
 SYSTEM_PROMPT = """Ты — умный математический калькулятор-помощник.
 Твоя задача — решать математические примеры, уравнения и задачи.
 
@@ -48,6 +61,9 @@ SYSTEM_PROMPT = """Ты — умный математический кальку
 - Дробь пиши как числитель/знаменатель в <code>: например <code>x²/2</code>"""
 
 
+# =========================
+# 🏗 Инициализация SDK
+# =========================
 def get_sdk():
     return AIStudio(
         folder_id=YANDEX_FOLDER_ID,
@@ -55,13 +71,16 @@ def get_sdk():
     )
 
 
+# =========================
+# 🧮 Решение задач (текст)
+# =========================
 async def solve_math(text: str) -> str:
-    """Решает математическую задачу из текста"""
     try:
         sdk = get_sdk()
         model = sdk.models.completions("yandexgpt").configure(temperature=0.1)
 
         loop = asyncio.get_event_loop()
+
         result = await loop.run_in_executor(
             None,
             lambda: model.run([
@@ -72,22 +91,24 @@ async def solve_math(text: str) -> str:
 
         for alternative in result:
             text_result = alternative.text
-            # Убираем код-блоки если модель их добавила
-            import re
-            text_result = re.sub(r'```[\w]*\n?', '', text_result)
-            text_result = text_result.strip()
+
+            # Очистка от markdown-кода
+            text_result = re.sub(r'```[\w]*\n?', '', text_result).strip()
+
             return text_result
 
-        return "Не удалось получить ответ от модели."
+        return "❌ Не удалось получить ответ от модели."
 
     except Exception as e:
-        return f"Произошла ошибка при обращении к ИИ: {str(e)}"
+        return f"❌ Ошибка ИИ: {str(e)}"
 
 
+# =========================
+# 🖼 OCR (распознавание текста)
+# =========================
 async def recognize_text_from_image(image_bytes: bytes) -> str:
-    """Распознаёт текст на изображении через Yandex Vision OCR"""
     try:
-        image_base64 = base64.b64encode(image_bytes).decode("utf-8")
+        image_base64 = base64.b64encode(image_bytes).decode()
 
         async with aiohttp.ClientSession() as session:
             async with session.post(
@@ -106,28 +127,26 @@ async def recognize_text_from_image(image_bytes: bytes) -> str:
             ) as response:
                 data = await response.json()
 
-        # Извлекаем текст из ответа
         blocks = data.get("result", {}).get("textAnnotation", {}).get("blocks", [])
+
         lines = []
         for block in blocks:
             for line in block.get("lines", []):
-                line_text = " ".join(
-                    word.get("text", "") for word in line.get("words", [])
-                )
+                line_text = " ".join(word.get("text", "") for word in line.get("words", []))
                 lines.append(line_text)
 
-        recognized_text = "\n".join(lines).strip()
-        return recognized_text if recognized_text else ""
+        return "\n".join(lines).strip()
 
-    except Exception as e:
+    except Exception:
         return ""
 
 
+# =========================
+# 📷 Решение по фото (LLM vision)
+# =========================
 async def solve_from_image(image_bytes: bytes) -> str:
-    """Отправляет фото напрямую в Gemma 3 27B для распознавания и решения"""
     try:
-        import base64
-        image_base64 = base64.b64encode(image_bytes).decode("utf-8")
+        image_base64 = base64.b64encode(image_bytes).decode()
 
         async with aiohttp.ClientSession() as session:
             async with session.post(
@@ -139,10 +158,7 @@ async def solve_from_image(image_bytes: bytes) -> str:
                 json={
                     "model": f"gpt://{YANDEX_FOLDER_ID}/gemma-3-27b-it/latest",
                     "messages": [
-                        {
-                            "role": "system",
-                            "content": SYSTEM_PROMPT
-                        },
+                        {"role": "system", "content": SYSTEM_PROMPT},
                         {
                             "role": "user",
                             "content": [
@@ -169,14 +185,16 @@ async def solve_from_image(image_bytes: bytes) -> str:
         if not result:
             return "❌ Не удалось получить ответ от модели."
 
-        import re
         result = re.sub(r'```[\w]*\n?', '', result).strip()
+
         return f"📷 <b>Решение по фото:</b>\n\n{result}"
 
     except Exception as e:
         return f"❌ Ошибка при обработке фото: {str(e)}"
 
 
+# =========================
+# 🎤 Голос → текст → решение
+# =========================
 async def solve_from_voice_text(voice_text: str) -> str:
-    """Решает задачу из голосового сообщения (после распознавания речи)"""
     return await solve_math(f"Задача продиктована голосом: {voice_text}")

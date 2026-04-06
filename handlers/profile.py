@@ -1,5 +1,5 @@
 import hashlib
-import os
+
 from aiogram import F, Router
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
@@ -8,18 +8,21 @@ from aiogram.types import CallbackQuery, Message, InlineKeyboardMarkup, InlineKe
 from database.models import get_user_profile, delete_user_profile, check_password
 import keyboards.user_kb as kb
 
+
 router = Router()
 
 
+# =========================
+# 🧠 FSM состояния профиля
+# =========================
 class ProfileStates(StatesGroup):
     waiting_delete_password = State()
 
 
-# ========================
-# Клавиатуры
-# ========================
-
-def get_profile_actions_kb():
+# =========================
+# 🎛️ Клавиатуры профиля
+# =========================
+def get_profile_actions_kb() -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(inline_keyboard=[
         [InlineKeyboardButton(text="✏️ Изменить данные", callback_data="profile_edit")],
         [InlineKeyboardButton(text="🗑 Удалить профиль", callback_data="profile_delete")],
@@ -27,19 +30,18 @@ def get_profile_actions_kb():
     ])
 
 
-def get_delete_confirm_kb():
+def get_delete_confirm_kb() -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(inline_keyboard=[
         [InlineKeyboardButton(text="🗑 Да, удалить", callback_data="profile_delete_confirm")],
         [InlineKeyboardButton(text="❌ Отмена", callback_data="profile_view")]
     ])
 
 
-# ========================
-# Просмотр профиля
-# ========================
-
+# =========================
+# 👤 Просмотр профиля
+# =========================
 @router.callback_query(F.data == "profile_view")
-@router.callback_query(F.data == "print")  # кнопка "Данные пользователя" в user_kb.py
+@router.callback_query(F.data == "print")  # кнопка из user_kb.py
 async def view_profile(callback: CallbackQuery, state: FSMContext):
     await state.clear()
     await callback.answer()
@@ -68,17 +70,17 @@ async def view_profile(callback: CallbackQuery, state: FSMContext):
     )
 
 
-# ========================
-# Изменить данные — перезапуск регистрации
-# ========================
-
+# =========================
+# ✏️ Изменение данных
+# =========================
 @router.callback_query(F.data == "profile_edit")
 async def profile_edit(callback: CallbackQuery, state: FSMContext):
     await callback.answer()
     await state.clear()
 
-    # Импортируем состояния регистрации и запускаем заново
+    # Перезапуск регистрации
     from handlers.registration import RegStates
+
     await state.set_state(RegStates.first_name)
     await callback.message.edit_text(
         "🔄 <b>Изменение данных</b>\n\n"
@@ -88,13 +90,13 @@ async def profile_edit(callback: CallbackQuery, state: FSMContext):
     )
 
 
-# ========================
-# Удалить профиль — подтверждение
-# ========================
-
+# =========================
+# 🗑 Удаление профиля (подтверждение)
+# =========================
 @router.callback_query(F.data == "profile_delete")
 async def profile_delete(callback: CallbackQuery, state: FSMContext):
     await callback.answer()
+
     user_id = callback.from_user.id
     profile = await get_user_profile(user_id)
 
@@ -109,32 +111,38 @@ async def profile_delete(callback: CallbackQuery, state: FSMContext):
     )
 
 
+# =========================
+# 🔐 Запрос пароля для удаления
+# =========================
 @router.callback_query(F.data == "profile_delete_confirm")
 async def profile_delete_confirm(callback: CallbackQuery, state: FSMContext):
     await callback.answer()
     await state.set_state(ProfileStates.waiting_delete_password)
+
     await callback.message.edit_text(
         "🔒 <b>Введите пароль от КНИТУ ONE</b> для подтверждения удаления профиля:",
         parse_mode='HTML'
     )
 
 
-# ========================
-# Удалить профиль — проверка пароля
-# ========================
-
+# =========================
+# 🔑 Проверка пароля и удаление
+# =========================
 @router.message(ProfileStates.waiting_delete_password, F.text)
 async def profile_delete_password(message: Message, state: FSMContext):
     user_id = message.from_user.id
     password = message.text.strip()
 
-    # Удаляем сообщение с паролем для безопасности
+    # Удаляем сообщение с паролем (безопасность)
     try:
         await message.delete()
     except:
         pass
 
+    # Хэшируем введенный пароль
     password_hash = hashlib.sha256(password.encode()).hexdigest()
+
+    # Проверяем пароль
     is_correct = await check_password(user_id, password_hash)
 
     if not is_correct:
@@ -145,6 +153,7 @@ async def profile_delete_password(message: Message, state: FSMContext):
         )
         return
 
+    # Удаляем профиль
     await delete_user_profile(user_id)
     await state.clear()
 

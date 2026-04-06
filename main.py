@@ -1,68 +1,3 @@
-# import asyncio
-# import logging
-# import os
-#
-# from aiogram import Bot, Dispatcher
-# from aiogram.types import BotCommand, BotCommandScopeDefault
-# from aiogram.client.default import DefaultBotProperties
-# from aiogram.client.session.aiohttp import AiohttpSession
-# from aiogram.enums import ParseMode
-# from dotenv import load_dotenv
-#
-# from handlers import user, admin
-# from database.models import db_start
-#
-# load_dotenv()
-#
-# TOKEN = os.getenv("TOKEN")
-# PROXY = os.getenv("PROXY")
-#
-# if not TOKEN:
-#     raise ValueError("❌ TOKEN не найден в .env")
-#
-# # 👇 ВОТ ГЛАВНАЯ МАГИЯ
-# if PROXY:
-#     print(f"🌐 Использую прокси: {PROXY}")
-#     session = AiohttpSession(proxy=PROXY)
-# else:
-#     print("🌐 Запуск без прокси")
-#     session = AiohttpSession()
-#
-# bot = Bot(
-#     token=TOKEN,
-#     default=DefaultBotProperties(parse_mode=ParseMode.HTML),
-#     session=session
-# )
-#
-# dp = Dispatcher()
-#
-#
-# async def set_commands(bot: Bot):
-#     commands = [
-#         BotCommand(command="start", description="🤖 Главное меню"),
-#         BotCommand(command="cancel", description="🚫 Отмена"),
-#         BotCommand(command="help", description="ℹ️ Помощь"),
-#     ]
-#     await bot.set_my_commands(commands, scope=BotCommandScopeDefault())
-#
-#
-# async def main():
-#     logging.basicConfig(level=logging.INFO)
-#
-#     dp.include_router(admin.router)
-#     dp.include_router(user.router)
-#
-#     await db_start()
-#     await set_commands(bot)
-#
-#     print("✅ Бот запущен!")
-#
-#     await dp.start_polling(bot)
-#
-#
-# if __name__ == "__main__":
-#     asyncio.run(main())
-
 import asyncio
 import logging
 import os
@@ -74,9 +9,15 @@ from aiogram.client.session.aiohttp import AiohttpSession
 from aiogram.enums import ParseMode
 from dotenv import load_dotenv
 
+# Роутеры (логика бота)
 from handlers import user, admin, registration, profile
-from database.models import db_start
 
+
+
+
+# =========================
+# 🔧 Загрузка конфигурации
+# =========================
 load_dotenv()
 
 TOKEN = os.getenv("TOKEN")
@@ -85,6 +26,10 @@ PROXY = os.getenv("PROXY")
 if not TOKEN:
     raise ValueError("❌ TOKEN не найден в .env")
 
+
+# =========================
+# 🌐 Настройка подключения (прокси / без)
+# =========================
 if PROXY:
     print(f"🌐 Использую прокси: {PROXY}")
     session = AiohttpSession(proxy=PROXY)
@@ -92,6 +37,10 @@ else:
     print("🌐 Запуск без прокси")
     session = AiohttpSession()
 
+
+# =========================
+# 🤖 Инициализация бота и диспетчера
+# =========================
 bot = Bot(
     token=TOKEN,
     default=DefaultBotProperties(parse_mode=ParseMode.HTML),
@@ -101,6 +50,9 @@ bot = Bot(
 dp = Dispatcher()
 
 
+# =========================
+# 📜 Команды бота (/start, /help и т.д.)
+# =========================
 async def set_commands(bot: Bot):
     commands = [
         BotCommand(command="start", description="🤖 Главное меню"),
@@ -110,22 +62,38 @@ async def set_commands(bot: Bot):
     await bot.set_my_commands(commands, scope=BotCommandScopeDefault())
 
 
+# =========================
+# 🚀 Основная функция запуска
+# =========================
 async def main():
     logging.basicConfig(level=logging.INFO)
 
-    # Регистрация должна быть первой — она перехватывает /start
+    # ⚠️ Порядок роутеров ВАЖЕН
+    # registration — перехватывает /start для новых пользователей
     dp.include_router(registration.router)
+
+    # профиль (работа с данными пользователя)
     dp.include_router(profile.router)
+
+    # админка
     dp.include_router(admin.router)
+
+    # основной пользовательский функционал (ИИ, калькулятор и т.д.)
     dp.include_router(user.router)
 
-    await db_start()
+    # 📜 Установка команд в Telegram
     await set_commands(bot)
 
     print("✅ Бот запущен!")
 
+    print("✅ MongoDB подключена!")
+
+    # ▶️ Запуск бота
     await dp.start_polling(bot)
 
 
+# =========================
+# ▶️ Точка входа
+# =========================
 if __name__ == "__main__":
     asyncio.run(main())

@@ -1,22 +1,39 @@
 from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
 
 
-### Главная клавиатура
-def get_start_kb(is_admin: bool):
+# =========================
+# 🏠 Главное меню
+# =========================
+def get_start_kb(is_admin: bool) -> InlineKeyboardMarkup:
     buttons = [
-        [InlineKeyboardButton(text="🧠 ИИ", callback_data="ai"), InlineKeyboardButton(text="📚 Лекции", callback_data="lectures")],
-        [InlineKeyboardButton(text="📝 Услуги", callback_data="services"), InlineKeyboardButton(text="👤 Профиль", callback_data="profile")],
-        [InlineKeyboardButton(text="💬 Поддержка", callback_data="support", url="https://t.me/damn_the_bucks")]
+        [
+            InlineKeyboardButton(text="🧠 ИИ", callback_data="ai"),
+            InlineKeyboardButton(text="📚 Лекции", callback_data="lectures")
+        ],
+        [
+            InlineKeyboardButton(text="📝 Услуги", callback_data="services"),
+            InlineKeyboardButton(text="👤 Профиль", callback_data="profile")
+        ],
+        [
+            InlineKeyboardButton(
+                text="💬 Поддержка",
+                url="https://t.me/damn_the_bucks"
+            )
+        ]
     ]
 
-    # ПРОВЕРЬТЕ ЗДЕСЬ: Должен быть InlineKeyboardButton, а не KeyboardButton
+    # Добавляем кнопку админки, если пользователь админ
     if is_admin:
-        buttons.append([InlineKeyboardButton(text="⚙️ Админ-панель", callback_data="admin_main")])
+        buttons.append([
+            InlineKeyboardButton(text="⚙️ Админ-панель", callback_data="admin_main")
+        ])
 
     return InlineKeyboardMarkup(inline_keyboard=buttons)
 
 
-### ИИ
+# =========================
+# 🤖 Раздел "ИИ"
+# =========================
 ai = InlineKeyboardMarkup(inline_keyboard=[
     [InlineKeyboardButton(text="🧮 Умнейший калькулятор", callback_data="calculator")],
     [InlineKeyboardButton(text="🎓 ИИ-репетитор", callback_data="ai-tutor")],
@@ -26,7 +43,9 @@ ai = InlineKeyboardMarkup(inline_keyboard=[
 ])
 
 
-### Лекции
+# =========================
+# 📚 Раздел "Лекции"
+# =========================
 lectures = InlineKeyboardMarkup(inline_keyboard=[
     [InlineKeyboardButton(text="📁 PDF-лекции", callback_data="pdf-lectures")],
     [InlineKeyboardButton(text="📓 Конспекты", callback_data="notes")],
@@ -34,7 +53,9 @@ lectures = InlineKeyboardMarkup(inline_keyboard=[
 ])
 
 
-### Услуги
+# =========================
+# 📝 Раздел "Услуги"
+# =========================
 services = InlineKeyboardMarkup(inline_keyboard=[
     [InlineKeyboardButton(text="🖨️ Распечатка", callback_data="print")],
     [InlineKeyboardButton(text="👨‍💻 Работы на заказ", callback_data="paid_works")],
@@ -42,7 +63,9 @@ services = InlineKeyboardMarkup(inline_keyboard=[
 ])
 
 
-### Профиль
+# =========================
+# 👤 Раздел "Профиль"
+# =========================
 profile = InlineKeyboardMarkup(inline_keyboard=[
     [InlineKeyboardButton(text="🔒 Данные пользователя", callback_data="print")],
     [InlineKeyboardButton(text="🟢 Подписка", callback_data="paid_works")],
@@ -51,10 +74,11 @@ profile = InlineKeyboardMarkup(inline_keyboard=[
 ])
 
 
-### Админ-панель
+# =========================
+# ⚙️ Админ-панель
+# =========================
 admin_panel = InlineKeyboardMarkup(inline_keyboard=[
     [InlineKeyboardButton(text="👥 Количество пользователей", callback_data="admin_count")],
     [InlineKeyboardButton(text="📝 Добавить лекцию", callback_data="admin_add_lecture")],
     [InlineKeyboardButton(text="⬅️ Назад", callback_data="back_to_main")]
 ])
-
