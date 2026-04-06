@@ -48,7 +48,10 @@ async def back_home(callback: CallbackQuery):
     is_admin_check = callback.from_user.id in ADMIN_IDS
 
     await callback.message.edit_text(
-        "Привет! Я математический бот 🤖\nВыбери что хочешь сделать:",
+        '<b>Привет! Я математический бот Math Tutor 🤖</b>\n'
+            'Я могу помочь тебе разобраться в математике, сделать из эксперта '
+            'по математическому анализу, дать почитать лекции и это еще не все 😉\n\n'
+            'Выбери нужный раздел:',
         reply_markup=kb.get_start_kb(is_admin_check),
         parse_mode='HTML'
     )
@@ -58,8 +61,8 @@ async def back_home(callback: CallbackQuery):
 # =========================
 # 📊 Статистика пользователей
 # =========================
-@router.callback_query(F.data == "admin_count", F.from_user.id.in_(ADMIN_IDS))
-async def get_users_count(callback: CallbackQuery):
+@router.callback_query(F.data == "admin_statistics", F.from_user.id.in_(ADMIN_IDS))
+async def get_users_statistics(callback: CallbackQuery):
     total = await count_users()
 
     await callback.message.edit_text(
@@ -80,6 +83,35 @@ async def add_lecture_stub(callback: CallbackQuery):
         "🚧 Функция 'Добавить лекцию' в разработке!",
         show_alert=True
     )
+
+
+# =========================
+# Чистая прибыль
+# =========================
+@router.callback_query(F.data == "admin_profit", F.from_user.id.in_(ADMIN_IDS))
+async def view_profit(callback: CallbackQuery):
+
+    users = await count_users()
+    subscription_price = 300
+    host_price = 500
+    api_price = 1500
+    profit = users * subscription_price - host_price - api_price
+    expenses = host_price + api_price
+
+    await callback.message.edit_text(
+        f"💰 <b>Ваша чистая прибыль</b>\n\n"
+        f"При данных параметрах:\n"
+        f"• Цена подписки - 300₽\n"
+        f"• Цена API - 1500₽\n"
+        f"• Цена хостинга - 500₽\n\n"
+        f"<b>Чистая прибыль составляет:</b> <code>{profit}₽</code>\n"
+        f"<b>Расходы составляют:</b> <code>{expenses}₽</code>\n",
+        reply_markup=kb.admin_panel,
+        parse_mode='HTML'
+    )
+    await callback.answer()
+
+
 
 
 # =========================

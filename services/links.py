@@ -15,3 +15,9 @@ federal_law_152_fz = hlink(
     'ФЗ от 27.07.2006 №152-ФЗ «О персональных данных»',
     'https://www.consultant.ru/document/cons_doc_LAW_61801/'
 )
+
+privacy_policy = hlink(
+    'политикой конфиденциальности',
+    'https://infinityriverdev.github.io/math-bot-site/policy.html' # <-- заменить на сайт с политикой
+)
+

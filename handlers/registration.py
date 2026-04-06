@@ -8,7 +8,7 @@ from aiogram.types import Message, CallbackQuery, InlineKeyboardMarkup, InlineKe
 
 from database.models import is_registered, register_user_full
 import keyboards.user_kb as kb
-from services.links import federal_law_152_fz
+from services.links import federal_law_152_fz, privacy_policy
 from handlers.admin import ADMIN_IDS
 
 router = Router()
@@ -123,14 +123,14 @@ def get_check_kb(field: str):
 
 def get_policy_kb():
     return InlineKeyboardMarkup(inline_keyboard=[
-        [InlineKeyboardButton(text="✅ Согласен", callback_data="policy_agree")],
-        [InlineKeyboardButton(text="❌ Не согласен", callback_data="policy_disagree")]
+        [InlineKeyboardButton(text="✅ Согласен", callback_data="policy_agree", style='success')],
+        [InlineKeyboardButton(text="❌ Не согласен", callback_data="policy_disagree", style='danger')]
     ])
 
 
 def get_confirm_kb():
     return InlineKeyboardMarkup(inline_keyboard=[
-        [InlineKeyboardButton(text="✅ Подтвердить", callback_data="reg_confirm")],
+        [InlineKeyboardButton(text="✅ Подтвердить", callback_data="reg_confirm", style='success')],
         [InlineKeyboardButton(text="✏️ Изменить данные", callback_data="reg_edit")]
     ])
 
@@ -158,7 +158,10 @@ async def cmd_start(message: Message, state: FSMContext):
         await state.clear()
         is_admin = user_id in ADMIN_IDS
         await message.answer(
-            'Привет! Я математический бот 🤖\nВыбери что хочешь сделать:',
+            '<b>Привет! Я математический бот Math Tutor 🤖</b>\n'
+            'Я могу помочь тебе разобраться в математике, сделать из эксперта '
+            'по математическому анализу, дать почитать лекции и это еще не все 😉\n\n'
+            'Выбери нужный раздел:',
             reply_markup=kb.get_start_kb(is_admin),
             parse_mode='HTML'
         )
@@ -271,7 +274,7 @@ async def reg_password(message: Message, state: FSMContext):
         "📋 <b>Политика обработки персональных данных.</b>\n\n"
         "Нажимая «Согласен», вы даёте согласие на обработку ваших персональных данных "
         f"в соответствии с {federal_law_152_fz} "
-        "на условиях и для целей, определенных политикой конфиденциальности.\n\n"
+        f"на условиях и для целей, определенных {privacy_policy}.\n\n"
         "Данные используются исключительно для идентификации в системе бота.",
         reply_markup=get_policy_kb(),
         parse_mode='HTML'

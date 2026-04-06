@@ -25,14 +25,14 @@ class ProfileStates(StatesGroup):
 def get_profile_actions_kb() -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(inline_keyboard=[
         [InlineKeyboardButton(text="✏️ Изменить данные", callback_data="profile_edit")],
-        [InlineKeyboardButton(text="🗑 Удалить профиль", callback_data="profile_delete")],
-        [InlineKeyboardButton(text="⬅️ Назад", callback_data="back_to_main")]
+        [InlineKeyboardButton(text="🗑 Удалить профиль", callback_data="profile_delete", style='danger')],
+        [InlineKeyboardButton(text="⬅️ Назад", callback_data="backward_to_profile")]
     ])
 
 
 def get_delete_confirm_kb() -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(inline_keyboard=[
-        [InlineKeyboardButton(text="🗑 Да, удалить", callback_data="profile_delete_confirm")],
+        [InlineKeyboardButton(text="🗑 Да, удалить", callback_data="profile_delete_confirm", style='danger')],
         [InlineKeyboardButton(text="❌ Отмена", callback_data="profile_view")]
     ])
 
@@ -41,7 +41,7 @@ def get_delete_confirm_kb() -> InlineKeyboardMarkup:
 # 👤 Просмотр профиля
 # =========================
 @router.callback_query(F.data == "profile_view")
-@router.callback_query(F.data == "print")  # кнопка из user_kb.py
+@router.callback_query(F.data == "user_data")  # кнопка из user_kb.py
 async def view_profile(callback: CallbackQuery, state: FSMContext):
     await state.clear()
     await callback.answer()

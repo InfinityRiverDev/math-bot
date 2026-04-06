@@ -37,7 +37,10 @@ async def cmd_start(message: Message, state: FSMContext):
     is_admin = user_id in ADMIN_IDS
 
     await message.answer(
-        '<b>Привет! Я математический бот 🤖</b>\nВыбери что хочешь сделать:',
+        '<b>Привет! Я математический бот Math Tutor 🤖</b>\n'
+            'Я могу помочь тебе разобраться в математике, сделать из эксперта '
+            'по математическому анализу, дать почитать лекции и это еще не все 😉\n\n'
+            'Выбери нужный раздел:',
         reply_markup=kb.get_start_kb(is_admin),
         parse_mode='HTML'
     )
@@ -54,17 +57,51 @@ async def cmd_ai(callback: CallbackQuery):
                             reply_markup=kb.ai,
                             parse_mode='HTML')
 
-
-# ========================
-# Лекции
-# ========================
-
-# @router.callback_query(F.data == 'lectures')
-# async def cmd_lectures(callback: CallbackQuery):
+### Назад в ИИ (нужна будет во вложенных функциях раздела ИИ чтобы преходить обратно не на главный экран а в раздел ИИ)
+# @router.callback_query(F.data == 'backward_to_ai')
+# async def cmd_ai(callback: CallbackQuery):
 #     await callback.answer()
-#     await callback.message.edit_text('<b>Ты попал в раздел Лекции.</b>\nВыбери что хочешь сделать:',
-#                                      reply_markup=kb.lectures,
-#                                      parse_mode='HTML')
+#     await callback.message.edit_text('<b>Ты попал в раздел ИИ.</b>\nВыбери что хочешь сделать:',
+#                             reply_markup=kb.ai,
+#                             parse_mode='HTML')
+
+### Практика  (Заглушка)
+@router.callback_query(F.data == 'practice')
+async def cmd_practice(callback: CallbackQuery):
+    await callback.answer(
+        "🚧 Функция 'Практика' в разработке!",
+        show_alert=True
+    )
+
+### Выбрать ИИ  (Заглушка)
+
+@router.callback_query(F.data == 'choose_ai')
+async def cmd_choose_ai(callback: CallbackQuery):
+    await callback.answer(
+        "🚧 Функция 'Выбрать ИИ' в разработке!",
+        show_alert=True
+    )
+
+
+# ========================
+# Лекции (Заглушка)
+# ========================
+
+@router.callback_query(F.data == 'lectures')
+async def cmd_lectures(callback: CallbackQuery):
+    # await callback.answer()
+    # await callback.message.edit_text()
+    await callback.answer(
+        "🚧 Функция 'Лекции' в разработке!",
+        show_alert=True
+    )
+
+### Назад в Лекции (нужна будет во вложенных функциях раздела Лекции чтобы преходить обратно не на главный экран а в раздел Лекции)
+# @router.callback_query(F.data == 'backward_to_lectures')
+# async def cmd_lectures(callback: CallbackQuery):
+    # await callback.answer()
+    # await callback.message.edit_text()
+
 
 
 # ========================
@@ -78,6 +115,37 @@ async def cmd_services(callback: CallbackQuery):
                                      reply_markup=kb.services,
                                      parse_mode='HTML')
 
+### Назад в Услуги (нужна во вложенных функциях раздела Услуги чтобы преходить обратно не на главный экран а в раздел Услуги)
+@router.callback_query(F.data == 'backward_to_services')
+async def cmd_services(callback: CallbackQuery):
+    await callback.answer()
+    await callback.message.edit_text('<b>Ты попал в раздел Услуги.</b>\nВыбери что хочешь сделать:',
+                                     reply_markup=kb.services,
+                                     parse_mode='HTML')
+
+### Распечатка
+
+@router.callback_query(F.data == 'print')
+async def cmd_print(callback: CallbackQuery):
+    await callback.answer()
+    await callback.message.edit_text('<b>Вы можете заказать печать любых файлов, картинок, докладов, рефератов и тд.</b>\n\n'
+                                     '• Цена одной страницы печати - 10₽\n'
+                                     '• Заказ можно будет забрать в институте или в ДАС №6\n\n'
+                                     'Для того чтобы заказать печать обратитесь к менеджеру:',
+                                     reply_markup=kb.print,
+                                     parse_mode='HTML')
+
+### Работы на заказ (Заглушка)
+
+@router.callback_query(F.data == 'paid_works')
+async def cmd_paid_works(callback: CallbackQuery):
+    # await callback.answer()
+    # await callback.message.edit_text()
+    await callback.answer(
+        "🚧 Функция 'Работы на заказ' в разработке!",
+        show_alert=True
+    )
+
 
 # ========================
 # Профиль
@@ -90,6 +158,68 @@ async def cmd_profile(callback: CallbackQuery):
                                      reply_markup=kb.profile,
                                      parse_mode='HTML')
 
+### Назад в Профиль (нужна будет во вложенных функциях раздела Профиль чтобы преходить обратно не на главный экран а в раздел Профиль)
+@router.callback_query(F.data == 'backward_to_profile')
+async def cmd_backward_to_profile(callback: CallbackQuery):
+    await callback.answer()
+    await callback.message.edit_text('<b>Ты попал в раздел Профиль.</b>\nВыбери что хочешь сделать:',
+                                     reply_markup=kb.profile,
+                                     parse_mode='HTML')
+
+### Мои ХР  (Заглушка)
+
+@router.callback_query(F.data == 'my_xp')
+async def cmd_my_xp(callback: CallbackQuery):
+    # await callback.answer()
+    # await callback.message.edit_text()
+    await callback.answer(
+        "🚧 Функция 'Мои ХР' в разработке!",
+        show_alert=True
+    )
+
+
+# ========================
+# Расписание
+# ========================
+
+@router.callback_query(F.data == 'schedule')
+async def cmd_schedule(callback: CallbackQuery):
+    await callback.answer()
+    await callback.message.edit_text('<b>Ты попал в раздел Расписание.</b>\nВыбери что хочешь сделать:',
+                                     reply_markup=kb.schedule,
+                                     parse_mode='HTML')
+
+### Назад в Расписание (нужна будет во вложенных функциях раздела Расписание чтобы преходить обратно не на главный экран а в раздел Расписание)
+# @router.callback_query(F.data == 'backward_to_schedule')
+# async def cmd_schedule(callback: CallbackQuery):
+#     await callback.answer()
+#     await callback.message.edit_text('<b>Ты попал в раздел Расписание.</b>\nВыбери что хочешь сделать:',
+#                                      reply_markup=kb.schedule,
+#                                      parse_mode='HTML')
+
+### Посмотреть расписание (Заглушка)
+
+@router.callback_query(F.data == 'view_schedule')
+async def cmd_view_schedule(callback: CallbackQuery):
+    # await callback.answer()
+    # await callback.message.edit_text()
+    await callback.answer(
+        "🚧 Функция 'Посмотреть расписание' в разработке!",
+        show_alert=True
+    )
+
+### To-Do список дел (Заглушка)
+
+@router.callback_query(F.data == 'to_do_list')
+async def cmd_to_do_list(callback: CallbackQuery):
+    # await callback.answer()
+    # await callback.message.edit_text()
+    await callback.answer(
+        "🚧 Функция 'To-Do список дел' в разработке!",
+        show_alert=True
+    )
+
+
 
 # ========================
 # Поддержка
@@ -98,6 +228,48 @@ async def cmd_profile(callback: CallbackQuery):
 # @router.callback_query(F.data == 'profile')
 # async def cmd_profile(callback: CallbackQuery):
 #     await callback.answer()
+
+
+# ========================
+# Фокус
+# ========================
+
+@router.callback_query(F.data == 'focus')
+async def cmd_profile(callback: CallbackQuery):
+    await callback.answer()
+    await callback.message.edit_text('<b>Ты попал в раздел Профиль.</b>\nВыбери что хочешь сделать:',
+                                     reply_markup=kb.focus,
+                                     parse_mode='HTML')
+
+### Назад в Фокус (нужна будет во вложенных функциях раздела Фокус чтобы преходить обратно не на главный экран а в раздел Фокус)
+# @router.callback_query(F.data == 'backward_to_focus')
+# async def cmd_profile(callback: CallbackQuery):
+#     await callback.answer()
+#     await callback.message.edit_text('<b>Ты попал в раздел Профиль.</b>\nВыбери что хочешь сделать:',
+#                                      reply_markup=kb.focus,
+#                                      parse_mode='HTML')
+
+### Музыка (Заглушка)
+
+@router.callback_query(F.data == 'music')
+async def cmd_music(callback: CallbackQuery):
+    # await callback.answer()
+    # await callback.message.edit_text()
+    await callback.answer(
+        "🚧 Функция 'Музыка' в разработке!",
+        show_alert=True
+    )
+
+### Таймер Помодоро (Заглушка)
+
+@router.callback_query(F.data == 'pomodoro_timer')
+async def cmd_pomodoro_timer(callback: CallbackQuery):
+    # await callback.answer()
+    # await callback.message.edit_text()
+    await callback.answer(
+        "🚧 Функция 'Таймер Помодоро' в разработке!",
+        show_alert=True
+    )
 
 
 # ========================
@@ -120,6 +292,8 @@ async def cmd_cancel(message: Message, state: FSMContext):
         f'⛔ Остановлено.\nВернулся в главное меню 👇',
         reply_markup=kb.get_start_kb(message.from_user.id in ADMIN_IDS)
     )
+
+
 
 
 # ========================
@@ -594,11 +768,3 @@ async def tutor_handle_document(message: Message, state: FSMContext, bot: Bot):
         await res_msg.edit_text(f"❌ Ошибка при чтении файла: {str(e)}")
 
 
-# ========================
-# Заглушка
-# ========================
-
-@router.callback_query(F.data == 'lectures')
-async def open_lectures(callback: CallbackQuery):
-    await callback.answer()
-    await callback.message.edit_text('📚 Лекции — скоро будет доступно!')
