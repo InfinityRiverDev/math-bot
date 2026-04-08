@@ -21,11 +21,29 @@ YANDEX_FOLDER_ID = os.getenv("YANDEX_FOLDER_ID")
 
 
 # =========================
-# 🧠 SYSTEM PROMPT
+# 🧠 SYSTEM PROMPT — Репетитор
 # =========================
 TUTOR_PROMPT = """Ты — экспертный ИИ-репетитор по математике.
 ... (оставляем как есть)
 """
+
+
+# =========================
+# 🧠 SYSTEM PROMPT — Практика
+# =========================
+PRACTICE_PROMPT = """Ты — тренажёр по математике. Твоя единственная задача — давать практические задачи по указанной теме.
+
+СТРОГИЕ ПРАВИЛА:
+1. Никакой теории, объяснений, определений — только задачи.
+2. На каждый запрос темы давай ровно 3 задачи разной сложности (лёгкая, средняя, сложная).
+3. Формат ответа строго такой:
+   <b>Задача 1 (лёгкая):</b> <code>текст задачи</code>
+   <b>Задача 2 (средняя):</b> <code>текст задачи</code>
+   <b>Задача 3 (сложная):</b> <code>текст задачи</code>
+4. Если пользователь присылает решение задачи — проверь его и скажи только: верно или неверно, и если неверно — правильный ответ.
+5. Если пользователь просит теорию или объяснение — отвечай только: "Здесь только практика. Для теории перейди в раздел ИИ-репетитор."
+6. Никогда не используй LaTeX. Пиши формулы обычным текстом в тегах <code>.</code>
+7. Не пиши ничего лишнего — только задачи или проверка ответа."""
 
 
 # =========================
@@ -119,7 +137,63 @@ async def ask_tutor(text: str, history: list = None):
 
                 async for line in resp.content:
 
-                    # 🔴 проверка отмены
+                    if asyncio.current_task().cancelled():
+                        return
+
+                    line = line.decode().strip()
+
+                    if line.startswith("data: "):
+                        try:
+                            data = json.loads(line[6:])
+                            content = data['choices'][0]['delta'].get('content', '')
+
+                            if content:
+                                for char in content:
+                                    if asyncio.current_task().cancelled():
+                                        return
+
+                                    yield char
+                                    await asyncio.sleep(0.005)
+
+                        except:
+                            continue
+
+    except asyncio.CancelledError:
+        return
+
+    except Exception as e:
+        yield f"❌ Ошибка: {str(e)}"
+
+
+# =========================
+# ✍️ Практика (отдельный промпт)
+# =========================
+async def ask_practice(text: str, history: list = None):
+    try:
+        messages = [{"role": "system", "content": PRACTICE_PROMPT}]
+
+        if history:
+            messages.extend(history)
+
+        messages.append({"role": "user", "content": text})
+
+        async with aiohttp.ClientSession() as session:
+            async with session.post(
+                "https://llm.api.cloud.yandex.net/v1/chat/completions",
+                headers={
+                    "Authorization": f"Api-Key {YANDEX_API_KEY}",
+                    "Content-Type": "application/json"
+                },
+                json={
+                    "model": f"gpt://{YANDEX_FOLDER_ID}/gemma-3-27b-it/latest",
+                    "messages": messages,
+                    "temperature": 0.2,
+                    "stream": True
+                }
+            ) as resp:
+
+                async for line in resp.content:
+
                     if asyncio.current_task().cancelled():
                         return
 

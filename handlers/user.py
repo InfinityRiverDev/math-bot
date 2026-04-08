@@ -8,6 +8,7 @@ from aiogram.filters import CommandStart, Command
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
 from aiogram.types import Message, CallbackQuery
+from aiogram.exceptions import TelegramBadRequest
 
 import keyboards.user_kb as kb
 from handlers.admin import ADMIN_IDS
@@ -22,6 +23,7 @@ router = Router()
 class CalculatorStates(StatesGroup):
     waiting_for_input = State()
     tutor_waiting = State()
+    practice_waiting = State()
 
 
 @router.message(CommandStart())
@@ -31,7 +33,6 @@ async def cmd_start(message: Message, state: FSMContext):
     user_id = message.from_user.id
     username = message.from_user.username or "NoUsername"
 
-    # ✅ РЕГИСТРАЦИЯ В MONGO
     await register_user(user_id, username)
 
     is_admin = user_id in ADMIN_IDS
@@ -47,61 +48,59 @@ async def cmd_start(message: Message, state: FSMContext):
 
 
 # ========================
-# ИИ
+# ИИ-репетитор (меню)
 # ========================
 
-@router.callback_query(F.data == 'ai')
-async def cmd_ai(callback: CallbackQuery):
+@router.callback_query(F.data == 'ai_tutor_menu')
+async def cmd_ai_tutor_menu(callback: CallbackQuery):
     await callback.answer()
-    await callback.message.edit_text('<b>Ты попал в раздел ИИ.</b>\nВыбери что хочешь сделать:',
-                            reply_markup=kb.ai,
-                            parse_mode='HTML')
+    try:
+        await callback.message.edit_text(
+            '<b>🎓 ИИ-репетитор</b>\nВыбери что хочешь сделать:',
+            reply_markup=kb.ai_tutor_menu,
+            parse_mode='HTML'
+        )
+    except TelegramBadRequest as e:
+        if "message is not modified" not in str(e):
+            raise
 
-### Назад в ИИ (нужна будет во вложенных функциях раздела ИИ чтобы преходить обратно не на главный экран а в раздел ИИ)
-# @router.callback_query(F.data == 'backward_to_ai')
-# async def cmd_ai(callback: CallbackQuery):
-#     await callback.answer()
-#     await callback.message.edit_text('<b>Ты попал в раздел ИИ.</b>\nВыбери что хочешь сделать:',
-#                             reply_markup=kb.ai,
-#                             parse_mode='HTML')
 
-### Практика  (Заглушка)
 @router.callback_query(F.data == 'practice')
-async def cmd_practice(callback: CallbackQuery):
-    await callback.answer(
-        "🚧 Функция 'Практика' в разработке!",
-        show_alert=True
-    )
-
-### Выбрать ИИ  (Заглушка)
-
-@router.callback_query(F.data == 'choose_ai')
-async def cmd_choose_ai(callback: CallbackQuery):
-    await callback.answer(
-        "🚧 Функция 'Выбрать ИИ' в разработке!",
-        show_alert=True
+async def cmd_practice(callback: CallbackQuery, state: FSMContext):
+    await callback.answer()
+    await state.set_state(CalculatorStates.practice_waiting)
+    await state.update_data(current_task=None, cancelled=False)
+    await callback.message.edit_text(
+        '✍️ <b>Практика</b>\n\n'
+        'Напиши тему — и я дам тебе задачи для тренировки.\n\n'
+        'Например: <code>производная</code>, <code>интегралы</code>, <code>пределы</code>\n\n'
+        'Для выхода напиши /cancel',
+        parse_mode='HTML'
     )
 
 
 # ========================
-# Лекции (Заглушка)
+# Образование
 # ========================
+
+@router.callback_query(F.data == 'education')
+async def cmd_education(callback: CallbackQuery):
+    await callback.answer()
+    await callback.message.edit_text(
+        '<b>📚 Образование</b>\nВыбери что хочешь сделать:',
+        reply_markup=kb.education,
+        parse_mode='HTML'
+    )
+
 
 @router.callback_query(F.data == 'lectures')
 async def cmd_lectures(callback: CallbackQuery):
-    # await callback.answer()
-    # await callback.message.edit_text()
-    await callback.answer(
-        "🚧 Функция 'Лекции' в разработке!",
-        show_alert=True
+    await callback.answer()
+    await callback.message.edit_text(
+        '<b>📖 Лекции</b>\nВыбери что хочешь сделать:',
+        reply_markup=kb.lectures,
+        parse_mode='HTML'
     )
-
-### Назад в Лекции (нужна будет во вложенных функциях раздела Лекции чтобы преходить обратно не на главный экран а в раздел Лекции)
-# @router.callback_query(F.data == 'backward_to_lectures')
-# async def cmd_lectures(callback: CallbackQuery):
-    # await callback.answer()
-    # await callback.message.edit_text()
-
 
 
 # ========================
@@ -115,67 +114,66 @@ async def cmd_services(callback: CallbackQuery):
                                      reply_markup=kb.services,
                                      parse_mode='HTML')
 
-### Назад в Услуги (нужна во вложенных функциях раздела Услуги чтобы преходить обратно не на главный экран а в раздел Услуги)
+
 @router.callback_query(F.data == 'backward_to_services')
-async def cmd_services(callback: CallbackQuery):
+async def cmd_backward_to_services(callback: CallbackQuery):
     await callback.answer()
     await callback.message.edit_text('<b>Ты попал в раздел Услуги.</b>\nВыбери что хочешь сделать:',
                                      reply_markup=kb.services,
                                      parse_mode='HTML')
 
-### Распечатка
 
 @router.callback_query(F.data == 'print')
 async def cmd_print(callback: CallbackQuery):
     await callback.answer()
-    await callback.message.edit_text('<b>Вы можете заказать печать любых файлов, картинок, докладов, рефератов и тд.</b>\n\n'
-                                     '• Цена одной страницы печати - 10₽\n'
-                                     '• Заказ можно будет забрать в институте или в ДАС №6\n\n'
-                                     'Для того чтобы заказать печать обратитесь к менеджеру:',
-                                     reply_markup=kb.print,
-                                     parse_mode='HTML')
-
-### Работы на заказ (Заглушка)
-
-@router.callback_query(F.data == 'paid_works')
-async def cmd_paid_works(callback: CallbackQuery):
-    # await callback.answer()
-    # await callback.message.edit_text()
-    await callback.answer(
-        "🚧 Функция 'Работы на заказ' в разработке!",
-        show_alert=True
+    await callback.message.edit_text(
+        '<b>Вы можете заказать печать любых файлов, картинок, докладов, рефератов и тд.</b>\n\n'
+        '• Цена одной страницы печати - 10₽\n'
+        '• Заказ можно будет забрать в институте или в ДАС №6\n\n'
+        'Для того чтобы заказать печать обратитесь к менеджеру:',
+        reply_markup=kb.print,
+        parse_mode='HTML'
     )
 
 
+@router.callback_query(F.data == 'paid_works')
+async def cmd_paid_works(callback: CallbackQuery):
+    await callback.answer("🚧 Функция 'Работы на заказ' в разработке!", show_alert=True)
+
+
 # ========================
-# Профиль
+# Личное
 # ========================
+
+@router.callback_query(F.data == 'personal')
+async def cmd_personal(callback: CallbackQuery):
+    await callback.answer()
+    await callback.message.edit_text(
+        '<b>👤 Личное</b>\nВыбери что хочешь сделать:',
+        reply_markup=kb.personal,
+        parse_mode='HTML'
+    )
+
 
 @router.callback_query(F.data == 'profile')
 async def cmd_profile(callback: CallbackQuery):
     await callback.answer()
-    await callback.message.edit_text('<b>Ты попал в раздел Профиль.</b>\nВыбери что хочешь сделать:',
+    await callback.message.edit_text('<b>👤 Профиль</b>\nВыбери что хочешь сделать:',
                                      reply_markup=kb.profile,
                                      parse_mode='HTML')
 
-### Назад в Профиль (нужна будет во вложенных функциях раздела Профиль чтобы преходить обратно не на главный экран а в раздел Профиль)
+
 @router.callback_query(F.data == 'backward_to_profile')
 async def cmd_backward_to_profile(callback: CallbackQuery):
     await callback.answer()
-    await callback.message.edit_text('<b>Ты попал в раздел Профиль.</b>\nВыбери что хочешь сделать:',
+    await callback.message.edit_text('<b>👤 Профиль</b>\nВыбери что хочешь сделать:',
                                      reply_markup=kb.profile,
                                      parse_mode='HTML')
 
-### Мои ХР  (Заглушка)
 
 @router.callback_query(F.data == 'my_xp')
 async def cmd_my_xp(callback: CallbackQuery):
-    # await callback.answer()
-    # await callback.message.edit_text()
-    await callback.answer(
-        "🚧 Функция 'Мои ХР' в разработке!",
-        show_alert=True
-    )
+    await callback.answer("🚧 Функция 'Мои ХР' в разработке!", show_alert=True)
 
 
 # ========================
@@ -185,49 +183,21 @@ async def cmd_my_xp(callback: CallbackQuery):
 @router.callback_query(F.data == 'schedule')
 async def cmd_schedule(callback: CallbackQuery):
     await callback.answer()
-    await callback.message.edit_text('<b>Ты попал в раздел Расписание.</b>\nВыбери что хочешь сделать:',
-                                     reply_markup=kb.schedule,
-                                     parse_mode='HTML')
+    await callback.message.edit_text(
+        '<b>📆 Расписание</b>\nВыбери что хочешь сделать:',
+        reply_markup=kb.schedule,
+        parse_mode='HTML'
+    )
 
-### Назад в Расписание (нужна будет во вложенных функциях раздела Расписание чтобы преходить обратно не на главный экран а в раздел Расписание)
-# @router.callback_query(F.data == 'backward_to_schedule')
-# async def cmd_schedule(callback: CallbackQuery):
-#     await callback.answer()
-#     await callback.message.edit_text('<b>Ты попал в раздел Расписание.</b>\nВыбери что хочешь сделать:',
-#                                      reply_markup=kb.schedule,
-#                                      parse_mode='HTML')
-
-### Посмотреть расписание (Заглушка)
 
 @router.callback_query(F.data == 'view_schedule')
 async def cmd_view_schedule(callback: CallbackQuery):
-    # await callback.answer()
-    # await callback.message.edit_text()
-    await callback.answer(
-        "🚧 Функция 'Посмотреть расписание' в разработке!",
-        show_alert=True
-    )
+    await callback.answer("🚧 Функция 'Посмотреть расписание' в разработке!", show_alert=True)
 
-### To-Do список дел (Заглушка)
 
 @router.callback_query(F.data == 'to_do_list')
 async def cmd_to_do_list(callback: CallbackQuery):
-    # await callback.answer()
-    # await callback.message.edit_text()
-    await callback.answer(
-        "🚧 Функция 'To-Do список дел' в разработке!",
-        show_alert=True
-    )
-
-
-
-# ========================
-# Поддержка
-# ========================
-#
-# @router.callback_query(F.data == 'profile')
-# async def cmd_profile(callback: CallbackQuery):
-#     await callback.answer()
+    await callback.answer("🚧 Функция 'To-Do список дел' в разработке!", show_alert=True)
 
 
 # ========================
@@ -235,41 +205,23 @@ async def cmd_to_do_list(callback: CallbackQuery):
 # ========================
 
 @router.callback_query(F.data == 'focus')
-async def cmd_profile(callback: CallbackQuery):
+async def cmd_focus(callback: CallbackQuery):
     await callback.answer()
-    await callback.message.edit_text('<b>Ты попал в раздел Профиль.</b>\nВыбери что хочешь сделать:',
-                                     reply_markup=kb.focus,
-                                     parse_mode='HTML')
+    await callback.message.edit_text(
+        '<b>🎯 Фокус</b>\nВыбери что хочешь сделать:',
+        reply_markup=kb.focus,
+        parse_mode='HTML'
+    )
 
-### Назад в Фокус (нужна будет во вложенных функциях раздела Фокус чтобы преходить обратно не на главный экран а в раздел Фокус)
-# @router.callback_query(F.data == 'backward_to_focus')
-# async def cmd_profile(callback: CallbackQuery):
-#     await callback.answer()
-#     await callback.message.edit_text('<b>Ты попал в раздел Профиль.</b>\nВыбери что хочешь сделать:',
-#                                      reply_markup=kb.focus,
-#                                      parse_mode='HTML')
-
-### Музыка (Заглушка)
 
 @router.callback_query(F.data == 'music')
 async def cmd_music(callback: CallbackQuery):
-    # await callback.answer()
-    # await callback.message.edit_text()
-    await callback.answer(
-        "🚧 Функция 'Музыка' в разработке!",
-        show_alert=True
-    )
+    await callback.answer("🚧 Функция 'Музыка' в разработке!", show_alert=True)
 
-### Таймер Помодоро (Заглушка)
 
 @router.callback_query(F.data == 'pomodoro_timer')
 async def cmd_pomodoro_timer(callback: CallbackQuery):
-    # await callback.answer()
-    # await callback.message.edit_text()
-    await callback.answer(
-        "🚧 Функция 'Таймер Помодоро' в разработке!",
-        show_alert=True
-    )
+    await callback.answer("🚧 Функция 'Таймер Помодоро' в разработке!", show_alert=True)
 
 
 # ========================
@@ -289,11 +241,9 @@ async def cmd_cancel(message: Message, state: FSMContext):
 
     await state.clear()
     await message.answer(
-        f'⛔ Остановлено.\nВернулся в главное меню 👇',
+        '⛔ Остановлено.\nВернулся в главное меню 👇',
         reply_markup=kb.get_start_kb(message.from_user.id in ADMIN_IDS)
     )
-
-
 
 
 # ========================
@@ -323,10 +273,8 @@ async def open_calculator(callback: CallbackQuery, state: FSMContext):
 @router.message(CalculatorStates.waiting_for_input, F.text)
 async def handle_text(message: Message, state: FSMContext):
     thinking_msg = await message.answer('🤔 Решаю задачу...')
-
     task = asyncio.create_task(solve_math(message.text))
     await state.update_data(current_task=task, cancelled=False)
-
     try:
         result = await task
         await thinking_msg.delete()
@@ -345,17 +293,13 @@ async def handle_text(message: Message, state: FSMContext):
 @router.message(CalculatorStates.waiting_for_input, F.photo)
 async def handle_photo(message: Message, bot: Bot, state: FSMContext):
     thinking_msg = await message.answer('📷 Распознаю текст на фото...')
-
     photo = message.photo[-1]
     file_in_io = io.BytesIO()
     await bot.download(photo, destination=file_in_io)
     image_bytes = file_in_io.getvalue()
-
     await thinking_msg.edit_text('🤔 Решаю задачу...')
-
     task = asyncio.create_task(solve_from_image(image_bytes))
     await state.update_data(current_task=task, cancelled=False)
-
     try:
         result = await task
         await thinking_msg.delete()
@@ -374,7 +318,6 @@ async def handle_photo(message: Message, bot: Bot, state: FSMContext):
 @router.message(CalculatorStates.waiting_for_input, F.voice)
 async def handle_voice(message: Message, bot: Bot, state: FSMContext):
     thinking_msg = await message.answer('🎤 Распознаю голосовое сообщение...')
-
     voice_buffer = io.BytesIO()
     await bot.download(message.voice, destination=voice_buffer)
     audio_bytes = voice_buffer.getvalue()
@@ -401,17 +344,12 @@ async def handle_voice(message: Message, bot: Bot, state: FSMContext):
         return
 
     await thinking_msg.edit_text(f'🤔 Решаю: <i>{recognized_text}</i>...', parse_mode='HTML')
-
     task = asyncio.create_task(solve_math(recognized_text))
     await state.update_data(current_task=task, cancelled=False)
-
     try:
         result = await task
         await thinking_msg.delete()
-        await message.answer(
-            f'🎤 <b>Распознано:</b> <i>{recognized_text}</i>\n\n{result}',
-            parse_mode='HTML'
-        )
+        await message.answer(f'🎤 <b>Распознано:</b> <i>{recognized_text}</i>\n\n{result}', parse_mode='HTML')
     except asyncio.CancelledError:
         try:
             await thinking_msg.delete()
@@ -436,7 +374,6 @@ async def handle_document(message: Message, bot: Bot, state: FSMContext):
         return
 
     thinking_msg = await message.answer('📄 Читаю документ...')
-
     file_in_io = io.BytesIO()
     await bot.download(doc, destination=file_in_io)
     file_bytes = file_in_io.getvalue()
@@ -452,10 +389,8 @@ async def handle_document(message: Message, bot: Bot, state: FSMContext):
         return
 
     await thinking_msg.edit_text('🤔 Решаю задачи из документа...')
-
     task = asyncio.create_task(solve_math(f"Задачи из документа:\n{text[:3000]}"))
     await state.update_data(current_task=task, cancelled=False)
-
     try:
         result = await task
         await thinking_msg.delete()
@@ -530,7 +465,13 @@ async def tutor_handle_text(message: Message, state: FSMContext):
                 pass
             return
         final_text = clean_response(full_text)
-        await res_msg.edit_text(final_text, parse_mode='HTML')
+        if not final_text.strip():
+            final_text = "⚠️ Не удалось получить ответ. Попробуйте снова."
+        try:
+            await res_msg.edit_text(final_text, parse_mode='HTML')
+        except TelegramBadRequest as e:
+            if "message is not modified" not in str(e):
+                raise
         history.append({"role": "user", "content": message.text})
         history.append({"role": "assistant", "content": final_text})
         await update_history(message.from_user.id, history[-10:])
@@ -594,7 +535,13 @@ async def tutor_handle_photo(message: Message, state: FSMContext, bot: Bot):
             return
 
         final_text = clean_response(full_text)
-        await res_msg.edit_text(f"📷 <b>Разбор фото:</b>\n\n{final_text}", parse_mode='HTML')
+        if not final_text.strip():
+            final_text = "⚠️ Не удалось получить ответ. Попробуйте снова."
+        try:
+            await res_msg.edit_text(f"📷 <b>Разбор фото:</b>\n\n{final_text}", parse_mode='HTML')
+        except TelegramBadRequest as e:
+            if "message is not modified" not in str(e):
+                raise
         history.append({"role": "user", "content": "[пользователь прислал фото]"})
         history.append({"role": "assistant", "content": final_text})
         await update_history(message.from_user.id, history[-10:])
@@ -671,10 +618,13 @@ async def tutor_handle_voice(message: Message, state: FSMContext, bot: Bot):
             return
 
         final_text = clean_response(full_text)
-        await res_msg.edit_text(
-            f"🗣 <i>\"{user_text}\"</i>\n\n{final_text}",
-            parse_mode='HTML'
-        )
+        if not final_text.strip():
+            final_text = "⚠️ Не удалось получить ответ. Попробуйте снова."
+        try:
+            await res_msg.edit_text(f"🗣 <i>\"{user_text}\"</i>\n\n{final_text}", parse_mode='HTML')
+        except TelegramBadRequest as e:
+            if "message is not modified" not in str(e):
+                raise
         history.append({"role": "user", "content": user_text})
         history.append({"role": "assistant", "content": final_text})
         await update_history(message.from_user.id, history[-10:])
@@ -753,7 +703,13 @@ async def tutor_handle_document(message: Message, state: FSMContext, bot: Bot):
             return
 
         final_text = clean_response(full_text)
-        await res_msg.edit_text(f"📄 <b>Разбор документа:</b>\n\n{final_text}", parse_mode='HTML')
+        if not final_text.strip():
+            final_text = "⚠️ Не удалось получить ответ. Попробуйте снова."
+        try:
+            await res_msg.edit_text(f"📄 <b>Разбор документа:</b>\n\n{final_text}", parse_mode='HTML')
+        except TelegramBadRequest as e:
+            if "message is not modified" not in str(e):
+                raise
         history.append({"role": "user", "content": f"Файл: {doc.file_name}"})
         history.append({"role": "assistant", "content": final_text})
         await update_history(message.from_user.id, history[-10:])
@@ -768,3 +724,59 @@ async def tutor_handle_document(message: Message, state: FSMContext, bot: Bot):
         await res_msg.edit_text(f"❌ Ошибка при чтении файла: {str(e)}")
 
 
+# ========================
+# Практика — текст
+# ========================
+
+@router.message(CalculatorStates.practice_waiting, F.text)
+async def practice_handle_text(message: Message, state: FSMContext):
+    res_msg = await message.answer("✍️ <b>Генерирую задачи...</b>", parse_mode='HTML')
+    await state.update_data(cancelled=False)
+
+    # ✅ ask_practice — отдельная функция с PRACTICE_PROMPT, без конфликта system-сообщений
+    from services.tutor import ask_practice, clean_response
+
+    full_text, displayed_text, last_edit_time = "", "", 0
+
+    async def stream_response():
+        nonlocal full_text, displayed_text, last_edit_time
+        async for chunk in ask_practice(message.text):
+            check = await state.get_data()
+            if check.get("cancelled"):
+                break
+            full_text += chunk
+            current_clean = clean_response(full_text)
+            if current_clean != displayed_text and (time.time() - last_edit_time) > 0.6:
+                try:
+                    await res_msg.edit_text(f"{current_clean} ▌", parse_mode='HTML')
+                    displayed_text, last_edit_time = current_clean, time.time()
+                except:
+                    pass
+        return full_text
+
+    task = asyncio.create_task(stream_response())
+    await state.update_data(current_task=task)
+
+    try:
+        await task
+        check = await state.get_data()
+        if check.get("cancelled"):
+            try:
+                await res_msg.delete()
+            except:
+                pass
+            return
+        final_text = clean_response(full_text)
+        if not final_text.strip():
+            final_text = "⚠️ Не удалось получить ответ. Попробуйте снова."
+        try:
+            await res_msg.edit_text(final_text, parse_mode='HTML')
+        except TelegramBadRequest as e:
+            if "message is not modified" not in str(e):
+                raise
+        await state.update_data(current_task=None)
+    except asyncio.CancelledError:
+        try:
+            await res_msg.delete()
+        except:
+            pass
