@@ -24,7 +24,6 @@ class ProfileStates(StatesGroup):
 # =========================
 def get_profile_actions_kb() -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(inline_keyboard=[
-        [InlineKeyboardButton(text="✏️ Изменить данные", callback_data="profile_edit")],
         [InlineKeyboardButton(text="🗑 Удалить профиль", callback_data="profile_delete", style='danger')],
         [InlineKeyboardButton(text="⬅️ Назад", callback_data="backward_to_profile")]
     ])
@@ -70,24 +69,24 @@ async def view_profile(callback: CallbackQuery, state: FSMContext):
     )
 
 
-# =========================
-# ✏️ Изменение данных
-# =========================
-@router.callback_query(F.data == "profile_edit")
-async def profile_edit(callback: CallbackQuery, state: FSMContext):
-    await callback.answer()
-    await state.clear()
-
-    # Перезапуск регистрации
-    from handlers.registration import RegStates
-
-    await state.set_state(RegStates.first_name)
-    await callback.message.edit_text(
-        "🔄 <b>Изменение данных</b>\n\n"
-        "Пройдите регистрацию заново — новые данные заменят старые.\n\n"
-        "<b>Шаг 1 из 6</b> — Введите ваше <b>имя</b>:",
-        parse_mode='HTML'
-    )
+# # =========================
+# # ✏️ Изменение данных
+# # =========================
+# @router.callback_query(F.data == "profile_edit")
+# async def profile_edit(callback: CallbackQuery, state: FSMContext):
+#     await callback.answer()
+#     await state.clear()
+#
+#     # Перезапуск регистрации
+#     from handlers.registration import RegStates
+#
+#     await state.set_state(RegStates.first_name)
+#     await callback.message.edit_text(
+#         "🔄 <b>Изменение данных</b>\n\n"
+#         "Пройдите регистрацию заново — новые данные заменят старые.\n\n"
+#         "<b>Шаг 1 из 6</b> — Введите ваше <b>имя</b>:",
+#         parse_mode='HTML'
+#     )
 
 
 # =========================

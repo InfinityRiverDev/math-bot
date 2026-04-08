@@ -11,6 +11,7 @@ from dotenv import load_dotenv
 
 # Роутеры (логика бота)
 from handlers import user, admin, registration, profile
+from services import pomodoro
 
 
 
@@ -80,6 +81,9 @@ async def main():
 
     # основной пользовательский функционал (ИИ, калькулятор и т.д.)
     dp.include_router(user.router)
+
+    # таймер помодоро
+    dp.include_router(pomodoro.router)
 
     # 📜 Установка команд в Telegram
     await set_commands(bot)

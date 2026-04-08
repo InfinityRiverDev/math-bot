@@ -51,8 +51,6 @@ education = InlineKeyboardMarkup(inline_keyboard=[
 # 📆 Расписание
 # =========================
 schedule = InlineKeyboardMarkup(inline_keyboard=[
-    [InlineKeyboardButton(text="📊 Посмотреть расписание", callback_data="view_schedule")],
-    [InlineKeyboardButton(text="✅ To-Do список дел", callback_data="to_do_list")],
     [InlineKeyboardButton(text="⬅️ Назад", callback_data="education")]
 ])
 
@@ -73,6 +71,7 @@ lectures = InlineKeyboardMarkup(inline_keyboard=[
 focus = InlineKeyboardMarkup(inline_keyboard=[
     [InlineKeyboardButton(text="🎧 Музыка", callback_data="music")],
     [InlineKeyboardButton(text="🍅 Таймер Помодоро", callback_data="pomodoro_timer")],
+    [InlineKeyboardButton(text="✅ To-Do список дел", callback_data="to_do_list")],
     [InlineKeyboardButton(text="⬅️ Назад", callback_data="back_to_main")]
 ])
 
@@ -91,6 +90,40 @@ print = InlineKeyboardMarkup(inline_keyboard=[
     [InlineKeyboardButton(text="⬅️ Назад", callback_data="backward_to_services")]
 ])
 
+paid_works = InlineKeyboardMarkup(inline_keyboard=[
+    [InlineKeyboardButton(text="👉 Презентация", callback_data="presentation")],
+    [InlineKeyboardButton(text="⬅️ Назад", callback_data="backward_to_services")]
+])
+
+presentation = InlineKeyboardMarkup(inline_keyboard=[
+    [InlineKeyboardButton(text="Шаблон 1", callback_data="pr_1")],
+    [InlineKeyboardButton(text="Шаблон 2", callback_data="pr_2")],
+    [InlineKeyboardButton(text="Шаблон 3", callback_data="pr_3")],
+    [InlineKeyboardButton(text="Шаблон 4", callback_data="pr_4")],
+    [InlineKeyboardButton(text="Шаблон 5", callback_data="pr_5")],
+    [InlineKeyboardButton(text="⬅️ Назад", callback_data="backward_to_paid_works")]
+])
+
+order_pr_1 = InlineKeyboardMarkup(inline_keyboard=[
+    [InlineKeyboardButton(text="Заказать", url="https://t.me/mermely?text=Хочу%20заказать%20презентацию%20по%20шаблону%20%22Минимализм%22")],
+    [InlineKeyboardButton(text="⬅️ Назад", callback_data="backward_to_presentation")]
+])
+order_pr_2 = InlineKeyboardMarkup(inline_keyboard=[
+    [InlineKeyboardButton(text="Заказать", url="https://t.me/mermely?text=Хочу%20заказать%20презентацию%20по%20шаблону%20%22Минимализм%22")],
+    [InlineKeyboardButton(text="⬅️ Назад", callback_data="backward_to_presentation")]
+])
+order_pr_3 = InlineKeyboardMarkup(inline_keyboard=[
+    [InlineKeyboardButton(text="Заказать", url="https://t.me/mermely?text=Хочу%20заказать%20презентацию%20по%20шаблону%20%22Минимализм%22")],
+    [InlineKeyboardButton(text="⬅️ Назад", callback_data="backward_to_presentation")]
+])
+order_pr_4 = InlineKeyboardMarkup(inline_keyboard=[
+    [InlineKeyboardButton(text="Заказать", url="https://t.me/mermely?text=Хочу%20заказать%20презентацию%20по%20шаблону%20%22Минимализм%22")],
+    [InlineKeyboardButton(text="⬅️ Назад", callback_data="backward_to_presentation")]
+])
+order_pr_5 = InlineKeyboardMarkup(inline_keyboard=[
+    [InlineKeyboardButton(text="Заказать", url="https://t.me/mermely?text=Хочу%20заказать%20презентацию%20по%20шаблону%20%22Минимализм%22")],
+    [InlineKeyboardButton(text="⬅️ Назад", callback_data="backward_to_presentation")]
+])
 
 # =========================
 # 👤 Личное (Профиль + Поддержка + Сайт)

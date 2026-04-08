@@ -7,7 +7,7 @@ from aiogram import F, Router, Bot
 from aiogram.filters import CommandStart, Command
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
-from aiogram.types import Message, CallbackQuery
+from aiogram.types import Message, CallbackQuery, FSInputFile
 from aiogram.exceptions import TelegramBadRequest
 
 import keyboards.user_kb as kb
@@ -135,10 +135,66 @@ async def cmd_print(callback: CallbackQuery):
         parse_mode='HTML'
     )
 
-
 @router.callback_query(F.data == 'paid_works')
 async def cmd_paid_works(callback: CallbackQuery):
-    await callback.answer("🚧 Функция 'Работы на заказ' в разработке!", show_alert=True)
+    await callback.answer()
+    await callback.message.edit_text(
+        '<b>Вы можете заказать любую работу из списка:</b>',
+        reply_markup=kb.paid_works,
+        parse_mode='HTML'
+    )
+
+@router.callback_query(F.data == 'backward_to_paid_works')
+async def cmd_backward_to_paid_works(callback: CallbackQuery):
+    await callback.answer()
+    await callback.message.edit_text(
+        '<b>Вы можете заказать любую работу из списка:</b>',
+        reply_markup=kb.paid_works,
+        parse_mode='HTML'
+    )
+
+@router.callback_query(F.data == 'presentation')
+async def cmd_presentation(callback: CallbackQuery):
+    await callback.answer()
+    await callback.message.edit_text(
+        '<b>Здесь вы можете заказать презентацию.\n\n</b>'
+        '• Цена презентации из 10 слайдов - 250₽\n'
+        '• Срок изготовления - 1 день.\n\n'
+        'Выберите шаблон вашей презентации:',
+        reply_markup=kb.presentation,
+        parse_mode='HTML'
+    )
+
+@router.callback_query(F.data == 'backward_to_presentation')
+async def cmd_backward_to_presentation(callback: CallbackQuery):
+    await callback.answer()
+    try:
+        await callback.message.delete()
+    except:
+        pass
+    await callback.message.answer(
+        '<b>Здесь вы можете заказать презентацию.\n\n</b>'
+        '• Цена презентации из 10 слайдов - 250₽\n'
+        '• Срок изготовления - 1 день.\n\n'
+        'Выберите шаблон вашей презентации:',
+        reply_markup=kb.presentation,
+        parse_mode='HTML'
+    )
+
+@router.callback_query(F.data == 'pr_1')
+async def cmd_pr_1(callback: CallbackQuery):
+    await callback.answer()
+    try:
+        await callback.message.delete()
+    except:
+        pass
+
+    await callback.message.answer_photo(photo=FSInputFile('media/presentation_templates/pr_1.jpg'),
+                                        caption='📊 <b>Шаблон:</b> шаблон 1\n'
+                                                '📌 <b>Описание:</b> Чистый и аккуратный стиль, идеально для учебы и защиты проектов\n'
+                                                '💰 <b>Цена:</b> 250₽\n\n'
+                                                'Для заказа нажмите кнопку ниже:',
+                                        reply_markup=kb.order_pr_1)
 
 
 # ========================
@@ -184,20 +240,10 @@ async def cmd_my_xp(callback: CallbackQuery):
 async def cmd_schedule(callback: CallbackQuery):
     await callback.answer()
     await callback.message.edit_text(
-        '<b>📆 Расписание</b>\nВыбери что хочешь сделать:',
+        '<b>📆 Ваше расписание:</b>',
         reply_markup=kb.schedule,
         parse_mode='HTML'
     )
-
-
-@router.callback_query(F.data == 'view_schedule')
-async def cmd_view_schedule(callback: CallbackQuery):
-    await callback.answer("🚧 Функция 'Посмотреть расписание' в разработке!", show_alert=True)
-
-
-@router.callback_query(F.data == 'to_do_list')
-async def cmd_to_do_list(callback: CallbackQuery):
-    await callback.answer("🚧 Функция 'To-Do список дел' в разработке!", show_alert=True)
 
 
 # ========================
@@ -219,9 +265,9 @@ async def cmd_music(callback: CallbackQuery):
     await callback.answer("🚧 Функция 'Музыка' в разработке!", show_alert=True)
 
 
-@router.callback_query(F.data == 'pomodoro_timer')
-async def cmd_pomodoro_timer(callback: CallbackQuery):
-    await callback.answer("🚧 Функция 'Таймер Помодоро' в разработке!", show_alert=True)
+# @router.callback_query(F.data == 'pomodoro_timer')
+# async def cmd_pomodoro_timer(callback: CallbackQuery):
+#     await callback.answer("🚧 Функция 'Таймер Помодоро' в разработке!", show_alert=True)
 
 
 # ========================
