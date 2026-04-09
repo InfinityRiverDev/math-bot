@@ -474,6 +474,7 @@ async def yookassa_webhook(request: web.Request) -> web.Response:
     Принимает уведомления от ЮKassa о статусе платежей.
     Регистрируется в main.py в aiohttp-приложении.
     """
+    print("🔥 WEBHOOK ПРИШЕЛ")
     try:
         body = await request.json()
     except Exception:
