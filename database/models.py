@@ -1,10 +1,14 @@
+"""
+database/models.py
+
+ИЗМЕНЕНИЯ:
+- register_user_full принимает group_id и knrtu_password_raw
+"""
+
 from datetime import datetime
 from database.mongo import users
 
 
-# =========================
-# 👤 Регистрация (простая)
-# =========================
 async def register_user(user_id: int, username: str):
     await users.update_one(
         {"user_id": user_id},
@@ -22,17 +26,11 @@ async def register_user(user_id: int, username: str):
     )
 
 
-# =========================
-# 📋 Проверка регистрации
-# =========================
 async def is_registered(user_id: int) -> bool:
     user = await users.find_one({"user_id": user_id})
     return user is not None
 
 
-# =========================
-# 🧾 Полная регистрация
-# =========================
 async def register_user_full(
     user_id: int,
     username: str,
@@ -41,43 +39,42 @@ async def register_user_full(
     institute: str,
     group: str,
     knrtu_login: str,
-    knrtu_password: str
+    knrtu_password: str,
+    group_id: int = None,           # ⬅️ числовой ID группы для расписания
+    knrtu_password_raw: str = None, # ⬅️ открытый пароль для получения токена
 ):
+    update_data = {
+        "username": username,
+        "first_name": first_name,
+        "last_name": last_name,
+        "institute": institute,
+        "group_number": group,
+        "knrtu_login": knrtu_login,
+        "knrtu_password": knrtu_password,
+        "registered_at": datetime.now().isoformat()
+    }
+
+    if group_id is not None:
+        update_data["group_id"] = group_id
+
+    if knrtu_password_raw is not None:
+        update_data["knrtu_password_raw"] = knrtu_password_raw
+
     await users.update_one(
         {"user_id": user_id},
-        {
-            "$set": {
-                "username": username,
-                "first_name": first_name,
-                "last_name": last_name,
-                "institute": institute,
-                "group_number": group,
-                "knrtu_login": knrtu_login,
-                "knrtu_password": knrtu_password,
-                "registered_at": datetime.now().isoformat()
-            }
-        },
+        {"$set": update_data},
         upsert=True
     )
 
 
-# =========================
-# 👤 Получить профиль
-# =========================
 async def get_user_profile(user_id: int):
     return await users.find_one({"user_id": user_id})
 
 
-# =========================
-# ❌ Удаление профиля
-# =========================
 async def delete_user_profile(user_id: int):
     await users.delete_one({"user_id": user_id})
 
 
-# =========================
-# 🔐 Проверка пароля
-# =========================
 async def check_password(user_id: int, password_hash: str) -> bool:
     user = await users.find_one({"user_id": user_id})
     if not user:
@@ -85,24 +82,15 @@ async def check_password(user_id: int, password_hash: str) -> bool:
     return user.get("knrtu_password") == password_hash
 
 
-# =========================
-# 📊 Кол-во пользователей
-# =========================
 async def count_users():
     return await users.count_documents({})
 
 
-# =========================
-# 📢 Все пользователи
-# =========================
 async def get_all_users():
     cursor = users.find({}, {"user_id": 1})
     return [doc["user_id"] async for doc in cursor]
 
 
-# =========================
-# 🧠 История ИИ
-# =========================
 async def get_history(user_id: int):
     user = await users.find_one({"user_id": user_id})
     return user.get("tutor_history", []) if user else []

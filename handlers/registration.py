@@ -1,3 +1,14 @@
+"""
+handlers/registration.py
+
+ИЗМЕНЕНИЯ:
+- get_knrtu_profile теперь тоже возвращает group_id
+- register_user_full сохраняет group_id и knrtu_password_raw (открытый пароль)
+  Это нужно для:
+  1. Расписания (нужен group_id для запроса)
+  2. Автоотметки (нужен свежий токен → нужен открытый пароль)
+"""
+
 import hashlib
 import re
 from aiogram import F, Router
@@ -11,6 +22,8 @@ import keyboards.user_kb as kb
 from services.links import federal_law_152_fz, privacy_policy
 from handlers.admin import ADMIN_IDS
 
+from database.billing_models import has_active_subscription
+
 router = Router()
 
 INSTITUTES = ["ИУАИТ", "ИХТИ", "ИУИ", "ИП", "ИНХН", "ИХНМ", "ИТЛПМД", "ИППБ"]
@@ -19,7 +32,6 @@ INSTITUTES = ["ИУАИТ", "ИХТИ", "ИУИ", "ИП", "ИНХН", "ИХНМ"
 # ========================
 # FSM регистрации
 # ========================
-
 class RegStates(StatesGroup):
     knrtu_login = State()
     knrtu_password = State()
@@ -28,18 +40,16 @@ class RegStates(StatesGroup):
 
 
 import aiohttp
-#проверка пароля и логина
-async def check_knrtu_auth(login: str, password: str) -> bool:
-    url = "https://rest.kstu.ru/restapi/login/"
 
+
+async def check_knrtu_auth(login: str, password: str) -> bool | str:
+    """Авторизует в КНИТУ ONE и возвращает токен (или False)."""
+    url = "https://rest.kstu.ru/restapi/login/"
     try:
         async with aiohttp.ClientSession() as session:
             async with session.post(
                 url,
-                json={
-                    "username": login,
-                    "password": password
-                },
+                json={"username": login, "password": password},
                 headers={
                     "accept": "*/*",
                     "accept-language": "ru,en;q=0.9",
@@ -48,69 +58,64 @@ async def check_knrtu_auth(login: str, password: str) -> bool:
                     "origin": "https://one.kstu.ru"
                 }
             ) as resp:
-
                 data = await resp.json()
                 print("KSTU RESPONSE:", data)
-
                 token = data.get("token") or data.get("access")
                 return token
-
     except Exception as e:
         print("KSTU AUTH ERROR:", e)
         return False
-    
+
 
 async def get_knrtu_profile(token: str):
+    """
+    Возвращает (first_name, last_name, group, group_id).
+    group_id — числовой ID группы, нужен для запроса расписания.
+    """
     url = "https://rest.kstu.ru/restapi/my-profile/"
-
     try:
         async with aiohttp.ClientSession() as session:
             async with session.get(
                 url,
-                headers={
-                    "authorization": f"Token {token}"
-                }
+                headers={"authorization": f"Token {token}"}
             ) as resp:
-
                 data = await resp.json()
                 print("PROFILE DATA:", data)
 
                 first_name = data.get("name")
                 last_name = data.get("surname")
-                group = data.get("role", {}).get("student_desc", {}).get("group")
 
-                return first_name, last_name, group
+                student_desc = data.get("role", {}).get("student_desc", {})
+                group = student_desc.get("group")
+
+                # group_id — числовой идентификатор группы для расписания
+                # Обычно находится в student_desc.group_id или аналогичном поле
+                group_id = (
+                    student_desc.get("group_id")
+                    or student_desc.get("id")
+                    or data.get("group_id")
+                )
+
+                return first_name, last_name, group, group_id
 
     except Exception as e:
         print("PROFILE ERROR:", e)
-        return None, None, None
-    
+        return None, None, None, None
+
+
 def get_institute_from_group(group: str) -> str:
     if not group:
         return "Неизвестно"
-
     try:
         index = int(group[0]) - 1
         return INSTITUTES[index]
-    except:
+    except Exception:
         return "Неизвестно"
+
 
 # ========================
 # Клавиатуры
 # ========================
-
-def get_institute_kb():
-    buttons = []
-    row = []
-    for i, inst in enumerate(INSTITUTES):
-        row.append(InlineKeyboardButton(text=inst, callback_data=f"inst_{inst}"))
-        if len(row) == 2:
-            buttons.append(row)
-            row = []
-    if row:
-        buttons.append(row)
-    return InlineKeyboardMarkup(inline_keyboard=buttons)
-
 
 def get_check_kb(field: str):
     return InlineKeyboardMarkup(inline_keyboard=[
@@ -123,14 +128,14 @@ def get_check_kb(field: str):
 
 def get_policy_kb():
     return InlineKeyboardMarkup(inline_keyboard=[
-        [InlineKeyboardButton(text="✅ Согласен", callback_data="policy_agree", style='success')],
-        [InlineKeyboardButton(text="❌ Не согласен", callback_data="policy_disagree", style='danger')]
+        [InlineKeyboardButton(text="✅ Согласен", callback_data="policy_agree")],
+        [InlineKeyboardButton(text="❌ Не согласен", callback_data="policy_disagree")]
     ])
 
 
 def get_confirm_kb():
     return InlineKeyboardMarkup(inline_keyboard=[
-        [InlineKeyboardButton(text="✅ Подтвердить", callback_data="reg_confirm", style='success')],
+        [InlineKeyboardButton(text="✅ Подтвердить", callback_data="reg_confirm")],
         [InlineKeyboardButton(text="✏️ Изменить данные", callback_data="reg_edit")]
     ])
 
@@ -146,30 +151,44 @@ def hash_password(password: str) -> str:
 @router.message(CommandStart())
 async def cmd_start(message: Message, state: FSMContext):
     user_id = message.from_user.id
-
+ 
     await message.answer_sticker(
         sticker="CAACAgIAAxkBAAFGiSNp0wHNqj0qnak00qEBwayIjgz6sQACjqIAAnjAkUoNk2wSUaJW9jsE"
     )
-
+ 
     already = await is_registered(user_id)
-
+ 
     if already:
-        # Уже зарегистрирован — показываем главное меню
         await state.clear()
         is_admin = user_id in ADMIN_IDS
-        await message.answer(
-            '<b>Привет! Я математический бот Math Tutor 🤖</b>\n'
-            'Я могу помочь тебе разобраться в математике, сделать из эксперта '
-            'по математическому анализу, дать почитать лекции и это еще не все 😉\n\n'
-            'Выбери нужный раздел:',
-            reply_markup=kb.get_start_kb(is_admin),
-            parse_mode='HTML'
-        )
+        has_sub = await has_active_subscription(user_id)
+ 
+        if has_sub or is_admin:
+            # Полный доступ
+            await message.answer(
+                '<b>Привет! Я математический бот Math Tutor 🤖</b>\n'
+                'Я могу помочь тебе разобраться в математике, сделать из эксперта '
+                'по математическому анализу, дать почитать лекции и это еще не все 😉\n\n'
+                'Выбери нужный раздел:',
+                reply_markup=kb.get_start_kb(is_admin),
+                parse_mode='HTML'
+            )
+        else:
+            # Нет подписки — ограниченное меню
+            await message.answer(
+                '<b>Привет! Я математический бот Math Tutor 🤖</b>\n\n'
+                '🔒 <b>Для использования бота необходима подписка.</b>\n\n'
+                'Доступные разделы без подписки:\n'
+                '• 📝 Услуги\n'
+                '• 👤 Личное (профиль, кошелёк)\n\n'
+                'Чтобы получить полный доступ — перейди в '
+                '<b>Личное → Кошелёк</b> и активируй тариф.',
+                reply_markup=kb.get_locked_kb(is_admin),
+                parse_mode='HTML'
+            )
     else:
-        # Первый раз — запускаем регистрацию
         await state.clear()
         await state.set_state(RegStates.knrtu_login)
-
         await message.answer(
             "👋 <b>Добро пожаловать!</b>\n\n"
             "Введите ваш <b>логин от КНИТУ ONE</b>:",
@@ -178,7 +197,7 @@ async def cmd_start(message: Message, state: FSMContext):
 
 
 # ========================
-# Шаг 1 — Логин КНИТУ ONE
+# Шаг 1 — Логин
 # ========================
 
 @router.message(RegStates.knrtu_login, F.text)
@@ -216,7 +235,7 @@ async def check_edit_login(callback: CallbackQuery, state: FSMContext):
 
 
 # ========================
-# Шаг 6 — Пароль КНИТУ ONE
+# Шаг 2 — Пароль + авторизация + получение профиля
 # ========================
 
 @router.message(RegStates.knrtu_password, F.text)
@@ -239,12 +258,13 @@ async def reg_password(message: Message, state: FSMContext):
         await message.answer_sticker(
             sticker="CAACAgIAAxkBAAFGiS9p0wKb1Ara3VWQRrIKk8YfMYmKZgACZJcAA-WQSimWYJy9_vw3OwQ"
         )
-        await message.answer("❌ Неверный логин или пароль. \nПопробуйте снова:")
+        await message.answer("❌ Неверный логин или пароль.\nПопробуйте снова:")
         return
 
     await msg.edit_text("🔍 Ищу вашу группу...")
 
-    first_name, last_name, group = await get_knrtu_profile(token)
+    # ⬇️ Теперь получаем и group_id
+    first_name, last_name, group, group_id = await get_knrtu_profile(token)
 
     if not group:
         await msg.edit_text("❌ Не удалось получить данные профиля.")
@@ -252,22 +272,22 @@ async def reg_password(message: Message, state: FSMContext):
 
     institute = get_institute_from_group(group)
 
-    # удаляем пароль из чата
+    # Удаляем сообщение с паролем (безопасность)
     try:
         await message.delete()
-    except:
+    except Exception:
         pass
 
-    # сохраняем всё
+    # ⬇️ Сохраняем пароль в открытом виде (для получения токена в будущем)
     await state.update_data(
-        knrtu_password=password,
+        knrtu_password=password,       # открытый пароль (для токена)
         group=group,
+        group_id=group_id,             # ⬅️ новое поле
         first_name=first_name,
         last_name=last_name,
         institute=institute
     )
 
-    # дальше сразу подтверждение
     await state.set_state(RegStates.policy)
 
     await message.answer(
@@ -285,14 +305,14 @@ async def reg_password(message: Message, state: FSMContext):
 async def check_edit_password(callback: CallbackQuery, state: FSMContext):
     await callback.answer()
     await callback.message.edit_text(
-        "<b>Шаг 6 из 6</b> — Введите ваш <b>пароль от КНИТУ ONE</b> снова:\n\n"
+        "Введите ваш <b>пароль от КНИТУ ONE</b> снова:\n\n"
         "<i>⚠️ Пароль будет сохранён в зашифрованном виде</i>",
         parse_mode='HTML'
     )
 
 
 # ========================
-# Политика — Согласен / Не согласен
+# Политика
 # ========================
 
 @router.callback_query(F.data == "policy_disagree", RegStates.policy)
@@ -300,8 +320,7 @@ async def policy_disagree(callback: CallbackQuery, state: FSMContext):
     await callback.answer()
     await state.clear()
     await callback.message.edit_text(
-        "❌ <b>Регистрация отменена.</b>\n\n"
-        "Для повторной регистрации нажмите /start",
+        "❌ <b>Регистрация отменена.</b>\n\nДля повторной регистрации нажмите /start",
         parse_mode='HTML'
     )
 
@@ -309,7 +328,6 @@ async def policy_disagree(callback: CallbackQuery, state: FSMContext):
 @router.callback_query(F.data == "policy_agree", RegStates.policy)
 async def policy_agree(callback: CallbackQuery, state: FSMContext):
     await callback.answer()
-
     await state.set_state(RegStates.confirm)
     data = await state.get_data()
 
@@ -326,7 +344,7 @@ async def policy_agree(callback: CallbackQuery, state: FSMContext):
 
 
 # ========================
-# Подтверждение / Изменение
+# Подтверждение
 # ========================
 
 @router.callback_query(F.data == "reg_edit", RegStates.confirm)
@@ -334,10 +352,10 @@ async def reg_edit(callback: CallbackQuery, state: FSMContext):
     await callback.answer()
     await state.clear()
     await callback.message.edit_text(
-        "🔄 <b>Начинаем регистрацию заново.</b>\n\n"
-        "<b>Шаг 1 из 6</b> — Введите ваше <b>имя</b>:",
+        "🔄 <b>Начинаем регистрацию заново.</b>\n\nВведите ваш <b>логин от КНИТУ ONE</b>:",
         parse_mode='HTML'
     )
+    await state.set_state(RegStates.knrtu_login)
 
 
 @router.callback_query(F.data == "reg_confirm", RegStates.confirm)
@@ -347,8 +365,8 @@ async def reg_confirm(callback: CallbackQuery, state: FSMContext):
 
     user_id = callback.from_user.id
     username = callback.from_user.username or ""
-
-    hashed_password = hash_password(data.get('knrtu_password', ''))
+    raw_password = data.get('knrtu_password', '')
+    hashed_password = hash_password(raw_password)
 
     await register_user_full(
         user_id=user_id,
@@ -357,24 +375,28 @@ async def reg_confirm(callback: CallbackQuery, state: FSMContext):
         last_name=data.get('last_name'),
         institute=data.get('institute'),
         group=data.get('group'),
+        group_id=data.get('group_id'),           # ⬅️ новое
         knrtu_login=data.get('knrtu_login'),
-        knrtu_password=hashed_password
+        knrtu_password=hashed_password,
+        knrtu_password_raw=raw_password,         # ⬅️ новое (открытый пароль для токена)
     )
 
     await state.clear()
-
-    from handlers.admin import ADMIN_IDS
     is_admin = user_id in ADMIN_IDS
-
+ 
     await callback.message.edit_text(
         "🎉 <b>Регистрация успешно завершена!</b>\n\n"
         f"Добро пожаловать, <b>{data.get('first_name')} {data.get('last_name')}</b>!\n\n"
-        "Теперь вы можете пользоваться всеми функциями бота.",
+        "Теперь вы можете пользоваться ботом.",
         parse_mode='HTML'
     )
-
+ 
     await callback.message.answer(
-        'Выбери что хочешь сделать:',
-        reply_markup=kb.get_start_kb(is_admin),
+        '🔒 <b>Для полного доступа нужна подписка.</b>\n\n'
+        'Сейчас тебе доступны только:\n'
+        '• 📝 Услуги\n'
+        '• 👤 Личное\n\n'
+        'Перейди в <b>Личное → Кошелёк</b> и активируй тариф 👇',
+        reply_markup=kb.get_locked_kb(is_admin),
         parse_mode='HTML'
     )

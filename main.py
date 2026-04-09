@@ -1,3 +1,12 @@
+"""
+main.py
+
+ИЗМЕНЕНИЯ:
+- Добавлены роутеры: schedule, lectures, attendance, billing
+- Добавлен SubscriptionMiddleware
+- Добавлен aiohttp-сервер для вебхука ЮKassa
+"""
+
 import asyncio
 import logging
 import os
@@ -7,30 +16,25 @@ from aiogram.types import BotCommand, BotCommandScopeDefault
 from aiogram.client.default import DefaultBotProperties
 from aiogram.client.session.aiohttp import AiohttpSession
 from aiogram.enums import ParseMode
+from aiohttp import web
 from dotenv import load_dotenv
 
-# Роутеры (логика бота)
 from handlers import user, admin, registration, profile
+from handlers import schedule, lectures, attendance, billing
 from services import pomodoro
 
+from middlewares.subscription_check import SubscriptionMiddleware
+from handlers.billing import yookassa_webhook
 
-
-
-# =========================
-# 🔧 Загрузка конфигурации
-# =========================
 load_dotenv()
 
-TOKEN = os.getenv("TOKEN")
-PROXY = os.getenv("PROXY")
+TOKEN        = os.getenv("TOKEN")
+PROXY        = os.getenv("PROXY")
+WEBHOOK_PORT = int(os.getenv("WEBHOOK_PORT", 8080))
 
 if not TOKEN:
     raise ValueError("❌ TOKEN не найден в .env")
 
-
-# =========================
-# 🌐 Настройка подключения (прокси / без)
-# =========================
 if PROXY:
     print(f"🌐 Использую прокси: {PROXY}")
     session = AiohttpSession(proxy=PROXY)
@@ -38,10 +42,6 @@ else:
     print("🌐 Запуск без прокси")
     session = AiohttpSession()
 
-
-# =========================
-# 🤖 Инициализация бота и диспетчера
-# =========================
 bot = Bot(
     token=TOKEN,
     default=DefaultBotProperties(parse_mode=ParseMode.HTML),
@@ -51,53 +51,55 @@ bot = Bot(
 dp = Dispatcher()
 
 
-# =========================
-# 📜 Команды бота (/start, /help и т.д.)
-# =========================
 async def set_commands(bot: Bot):
     commands = [
-        BotCommand(command="start", description="🤖 Главное меню"),
+        BotCommand(command="start",  description="🤖 Главное меню"),
         BotCommand(command="cancel", description="🚫 Отмена"),
-        BotCommand(command="help", description="ℹ️ Помощь"),
+        BotCommand(command="help",   description="ℹ️ Помощь"),
     ]
     await bot.set_my_commands(commands, scope=BotCommandScopeDefault())
 
 
-# =========================
-# 🚀 Основная функция запуска
-# =========================
 async def main():
     logging.basicConfig(level=logging.INFO)
 
-    # ⚠️ Порядок роутеров ВАЖЕН
-    # registration — перехватывает /start для новых пользователей
+    # ⚠️ Порядок роутеров важен
     dp.include_router(registration.router)
-
-    # профиль (работа с данными пользователя)
     dp.include_router(profile.router)
-
-    # админка
     dp.include_router(admin.router)
-
-    # основной пользовательский функционал (ИИ, калькулятор и т.д.)
+    dp.include_router(billing.router)       # ⬅️ кошелёк и оплата
+    dp.include_router(schedule.router)
+    dp.include_router(lectures.router)
+    dp.include_router(attendance.router)
     dp.include_router(user.router)
-
-    # таймер помодоро
     dp.include_router(pomodoro.router)
 
-    # 📜 Установка команд в Telegram
+    # ⬅️ Middleware проверки подписки (после регистрации роутеров)
+    dp.update.middleware(SubscriptionMiddleware())
+
     await set_commands(bot)
 
-    print("✅ Бот запущен!")
+    # ⬅️ aiohttp-сервер для вебхука ЮKassa
+    app = web.Application()
+    app["bot"] = bot
+    app.router.add_post("/yookassa/webhook", yookassa_webhook)
+    app.router.add_get("/health", lambda r: web.Response(text="ok"))
 
+    runner = web.AppRunner(app)
+    await runner.setup()
+    site = web.TCPSite(runner, host="0.0.0.0", port=WEBHOOK_PORT)
+    await site.start()
+    print(f"✅ aiohttp запущен на порту {WEBHOOK_PORT}")
+
+    print("✅ Бот запущен!")
     print("✅ MongoDB подключена!")
 
-    # ▶️ Запуск бота
-    await dp.start_polling(bot)
+    try:
+        await dp.start_polling(bot)
+    finally:
+        await runner.cleanup()
+        await bot.session.close()
 
 
-# =========================
-# ▶️ Точка входа
-# =========================
 if __name__ == "__main__":
     asyncio.run(main())
