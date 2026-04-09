@@ -35,12 +35,14 @@ WEBHOOK_PORT = int(os.getenv("PORT", 8080))
 if not TOKEN:
     raise ValueError("❌ TOKEN не найден в .env")
 
-if PROXY:
-    print(f"🌐 Использую прокси: {PROXY}")
-    session = AiohttpSession(proxy=PROXY)
-else:
-    print("🌐 Запуск без прокси")
-    session = AiohttpSession()
+# if PROXY:
+#     print(f"🌐 Использую прокси: {PROXY}")
+#     session = AiohttpSession(proxy=PROXY)
+# else:
+#     print("🌐 Запуск без прокси")
+#     session = AiohttpSession()
+
+session = AiohttpSession()
 
 bot = Bot(
     token=TOKEN,
