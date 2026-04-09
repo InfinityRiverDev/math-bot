@@ -30,7 +30,7 @@ load_dotenv()
 
 TOKEN        = os.getenv("TOKEN")
 PROXY        = os.getenv("PROXY")
-WEBHOOK_PORT = int(os.getenv("WEBHOOK_PORT", 8080))
+WEBHOOK_PORT = int(os.getenv("PORT", 8080))
 
 if not TOKEN:
     raise ValueError("❌ TOKEN не найден в .env")
