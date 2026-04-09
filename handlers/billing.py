@@ -400,6 +400,11 @@ async def confirm_plan_purchase(callback: CallbackQuery, state: FSMContext):
 
     await state.clear()
 
+    await callback.bot.send_sticker(
+        chat_id=callback.from_user.id,
+        sticker="CAACAgIAAxkBAAFG27xp2C7FjIk6uG_MOmxn5cgact0LQAACyIoAAp5fyEq-BgUKu_4q-TsE"
+    )
+
     await callback.message.edit_text(
         f"🎉 <b>Тариф «{plan['name']}» активирован!</b>\n\n"
         f"✅ Списано: <b>{final_price}₽</b>\n"
@@ -513,6 +518,10 @@ async def yookassa_webhook(request: web.Request) -> web.Response:
     bot: Bot = request.app.get("bot")
     if bot:
         try:
+            await bot.send_sticker(
+                chat_id=user_id,
+                sticker="CAACAgIAAxkBAAFG27Vp2C6_dKdMZFcMIaLXlAtVzhYQTQACqpUAAkaOwUqS3PLOvG5XhTsE"
+            )
             await bot.send_message(
                 user_id,
                 f"✅ <b>Кошелёк пополнен на {amount:.0f}₽!</b>\n\n"
