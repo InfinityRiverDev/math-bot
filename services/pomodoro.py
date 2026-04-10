@@ -288,6 +288,12 @@ async def _on_work_done(callback: CallbackQuery, state: FSMContext):
     task = asyncio.create_task(_run_timer(callback, state, break_time, phase="break"))
     await state.update_data(current_pomo_task=task)
 
+    from services.xp import give_xp
+    await give_xp(callback.bot, callback.from_user.id, "pomodoro_completed")
+    # Бонус за 5 циклов:
+    if cycles_done % 5 == 0:
+        await give_xp(callback.bot, callback.from_user.id, "pomodoro_5cycles")
+
 
 # =========================
 # ☕ Конец перерыва

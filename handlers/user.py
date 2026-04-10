@@ -7,7 +7,7 @@ from aiogram import F, Router, Bot
 from aiogram.filters import CommandStart, Command
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
-from aiogram.types import Message, CallbackQuery, FSInputFile
+from aiogram.types import Message, CallbackQuery, FSInputFile, InlineKeyboardMarkup, InlineKeyboardButton
 from aiogram.exceptions import TelegramBadRequest
 
 import keyboards.user_kb as kb
@@ -230,7 +230,38 @@ async def cmd_backward_to_profile(callback: CallbackQuery):
 
 @router.callback_query(F.data == 'my_xp')
 async def cmd_my_xp(callback: CallbackQuery):
-    await callback.answer("🚧 Функция 'Мои ХР' в разработке!", show_alert=True)
+    await callback.answer()
+    from database.xp_models import get_xp_profile, get_xp_history
+    profile = await get_xp_profile(callback.from_user.id)
+    history = await get_xp_history(callback.from_user.id, limit=5)
+
+    history_lines = ""
+    if history:
+        action_names = {
+            "tutor_message": "💬 Вопрос репетитору", "tutor_voice": "🎤 Голосовой вопрос",
+            "practice_request": "✍️ Практика", "calc_text": "🧮 Калькулятор",
+            "pomodoro_completed": "🍅 Помодоро", "todo_completed": "✅ Задача выполнена",
+            "lecture_downloaded": "📖 Лекция", "attendance_marked": "📍 Отметка на паре",
+            "music_downloaded": "🎵 Трек", "registration": "🎉 Регистрация",
+        }
+        history_lines = "\n\n<b>Последние начисления:</b>\n"
+        for h in history:
+            name = action_names.get(h["action"], h["action"])
+            history_lines += f"• {name}: <b>+{h['amount']} XP</b>\n"
+
+    to_next = f"До след. уровня: <b>{profile['xp_to_next']} XP</b>" if not profile["max_level"] else "🌟 Максимальный уровень!"
+
+    await callback.message.edit_text(
+        f"⭐ <b>Мои XP</b>\n\n"
+        f"🏆 Уровень: {profile['level']}\n"
+        f"✨ Всего XP: <b>{profile['xp']}</b>\n"
+        f"{profile['bar']}  {to_next}"
+        f"{history_lines}",
+        reply_markup=InlineKeyboardMarkup(inline_keyboard=[
+            [InlineKeyboardButton(text="⬅️ Назад", callback_data="profile")]
+        ]),
+        parse_mode='HTML'
+    )
 
 
 # ========================
@@ -261,14 +292,10 @@ async def cmd_focus(callback: CallbackQuery):
     )
 
 
-@router.callback_query(F.data == 'music')
-async def cmd_music(callback: CallbackQuery):
-    await callback.answer("🚧 Функция 'Музыка' в разработке!", show_alert=True)
+# @router.callback_query(F.data == 'music')
+# async def cmd_music(callback: CallbackQuery):
+#     await callback.answer("🚧 Функция 'Музыка' в разработке!", show_alert=True)
 
-
-# @router.callback_query(F.data == 'pomodoro_timer')
-# async def cmd_pomodoro_timer(callback: CallbackQuery):
-#     await callback.answer("🚧 Функция 'Таймер Помодоро' в разработке!", show_alert=True)
 
 
 # ========================

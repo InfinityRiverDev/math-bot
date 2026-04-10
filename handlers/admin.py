@@ -1,14 +1,14 @@
 """
 handlers/admin.py
 
-Добавлено:
-- Управление тарифами (создать / редактировать / удалить)
-- Управление промокодами (создать / удалить)
-- Рассылка всем пользователям
+Изменения:
+- Рассылка: две кнопки «Всем» и «По ID»
+- «По ID» принимает один или несколько ID через запятую/пробел
 """
 
 import asyncio
 import os
+import re
 
 from aiogram import Router, Bot, F
 from aiogram.fsm.context import FSMContext
@@ -40,7 +40,6 @@ class AdminStates(StatesGroup):
     plan_price        = State()
     plan_duration     = State()
     plan_description  = State()
-    # Редактирование тарифа
     edit_plan_field   = State()
     edit_plan_value   = State()
     # Промокоды
@@ -48,7 +47,9 @@ class AdminStates(StatesGroup):
     promo_discount    = State()
     promo_max_uses    = State()
     # Рассылка
-    broadcast_text    = State()
+    broadcast_text_all   = State()   # текст для рассылки всем
+    broadcast_ids        = State()   # ввод ID получателей
+    broadcast_text_ids   = State()   # текст для рассылки по ID
 
 
 def is_admin(message: Message) -> bool:
@@ -56,7 +57,7 @@ def is_admin(message: Message) -> bool:
 
 
 # ===========================
-# Главное меню админа
+# Главное меню
 # ===========================
 
 @router.callback_query(F.data == "admin_main", F.from_user.id.in_(ADMIN_IDS))
@@ -74,16 +75,17 @@ async def back_home(callback: CallbackQuery):
     is_admin_check = callback.from_user.id in ADMIN_IDS
     has_sub = await has_active_subscription(callback.from_user.id)
 
-    if is_admin_check or has_sub:
-        reply_markup = kb.get_start_kb(is_admin_check)
-    else:
-        reply_markup = kb.get_locked_kb(is_admin_check)
+    reply_markup = (
+        kb.get_start_kb(is_admin_check)
+        if is_admin_check or has_sub
+        else kb.get_locked_kb(is_admin_check)
+    )
 
     await callback.message.edit_text(
         '👋 <b>Добро пожаловать в Math Tutor!</b>\n\n'
-        '🤖 Я помогу тебе с математикой, прослежу за твоим расписанием '
-        'и автоматически отмечу тебя на парах.\n\n'
-        '👇 Выбери раздел:',
+                    '🤖 Я помогу тебе с математикой, прослежу за твоим расписанием '
+                    'и автоматически отмечу тебя на парах.\n\n'
+                    '👇 Выбери раздел:',
         reply_markup=reply_markup,
         parse_mode='HTML'
     )
@@ -112,16 +114,18 @@ async def get_users_statistics(callback: CallbackQuery):
 
 @router.callback_query(F.data == "admin_profit", F.from_user.id.in_(ADMIN_IDS))
 async def view_profit(callback: CallbackQuery):
-    users = await count_users()
+    users_count = await count_users()
     subscription_price = 300
     host_price = 500
     api_price = 1500
-    profit = users * subscription_price - host_price - api_price
+    profit = users_count * subscription_price - host_price - api_price
     expenses = host_price + api_price
     await callback.message.edit_text(
-        f"💰 <b>Ваша чистая прибыль</b>\n\n"
-        f"• Цена подписки - 300₽\n• Цена API - 1500₽\n• Цена хостинга - 500₽\n\n"
-        f"<b>Чистая прибыль:</b> <code>{profit}₽</code>\n"
+        f"💰 <b>Чистая прибыль</b>\n\n"
+        f"• Цена подписки: 300₽\n"
+        f"• API: {api_price}₽\n"
+        f"• Хостинг: {host_price}₽\n\n"
+        f"<b>Прибыль:</b> <code>{profit}₽</code>\n"
         f"<b>Расходы:</b> <code>{expenses}₽</code>",
         reply_markup=kb.admin_panel,
         parse_mode='HTML'
@@ -165,12 +169,12 @@ async def admin_plans_list(callback: CallbackQuery):
 
 def plan_edit_kb(plan_id: str) -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(inline_keyboard=[
-        [InlineKeyboardButton(text="✏️ Изменить название", callback_data=f"admin_plan_edit_{plan_id}_name")],
-        [InlineKeyboardButton(text="✏️ Изменить цену",    callback_data=f"admin_plan_edit_{plan_id}_price")],
-        [InlineKeyboardButton(text="✏️ Изменить срок",    callback_data=f"admin_plan_edit_{plan_id}_duration_days")],
-        [InlineKeyboardButton(text="✏️ Изменить описание",callback_data=f"admin_plan_edit_{plan_id}_description")],
-        [InlineKeyboardButton(text="🗑 Удалить",           callback_data=f"admin_plan_del_{plan_id}")],
-        [InlineKeyboardButton(text="⬅️ Назад",             callback_data="admin_plans")],
+        [InlineKeyboardButton(text="✏️ Название",    callback_data=f"admin_plan_edit_{plan_id}_name")],
+        [InlineKeyboardButton(text="✏️ Цена",        callback_data=f"admin_plan_edit_{plan_id}_price")],
+        [InlineKeyboardButton(text="✏️ Срок",        callback_data=f"admin_plan_edit_{plan_id}_duration_days")],
+        [InlineKeyboardButton(text="✏️ Описание",    callback_data=f"admin_plan_edit_{plan_id}_description")],
+        [InlineKeyboardButton(text="🗑 Удалить",     callback_data=f"admin_plan_del_{plan_id}")],
+        [InlineKeyboardButton(text="⬅️ Назад",       callback_data="admin_plans")],
     ])
 
 
@@ -200,7 +204,7 @@ async def admin_plan_create_start(callback: CallbackQuery, state: FSMContext):
     await callback.answer()
     await state.set_state(AdminStates.plan_name)
     await callback.message.edit_text(
-        "📦 <b>Новый тариф</b>\n\nВведите <b>название</b> тарифа:",
+        "📦 <b>Новый тариф</b>\n\nВведите <b>название</b>:",
         parse_mode='HTML'
     )
 
@@ -209,7 +213,7 @@ async def admin_plan_create_start(callback: CallbackQuery, state: FSMContext):
 async def admin_plan_name(message: Message, state: FSMContext):
     await state.update_data(plan_name=message.text.strip())
     await state.set_state(AdminStates.plan_price)
-    await message.answer("💰 Введите <b>цену</b> в рублях (например: <code>200</code>):", parse_mode='HTML')
+    await message.answer("💰 Введите <b>цену</b> в рублях:", parse_mode='HTML')
 
 
 @router.message(AdminStates.plan_price, F.from_user.id.in_(ADMIN_IDS))
@@ -217,11 +221,11 @@ async def admin_plan_price(message: Message, state: FSMContext):
     try:
         price = float(message.text.strip().replace(",", "."))
     except ValueError:
-        await message.answer("❌ Введите число. Например: <code>200</code>", parse_mode='HTML')
+        await message.answer("❌ Введите число.")
         return
     await state.update_data(plan_price=price)
     await state.set_state(AdminStates.plan_duration)
-    await message.answer("📅 Введите <b>срок действия</b> в днях (например: <code>30</code>):", parse_mode='HTML')
+    await message.answer("📅 Введите <b>срок действия</b> в днях:", parse_mode='HTML')
 
 
 @router.message(AdminStates.plan_duration, F.from_user.id.in_(ADMIN_IDS))
@@ -229,18 +233,14 @@ async def admin_plan_duration(message: Message, state: FSMContext):
     try:
         days = int(message.text.strip())
     except ValueError:
-        await message.answer("❌ Введите целое число дней.", parse_mode='HTML')
+        await message.answer("❌ Введите целое число.")
         return
     await state.update_data(plan_duration=days)
     await state.set_state(AdminStates.plan_description)
     skip_kb = InlineKeyboardMarkup(inline_keyboard=[
         [InlineKeyboardButton(text="⏭ Пропустить", callback_data="admin_plan_skip_desc")]
     ])
-    await message.answer(
-        "📝 Введите <b>описание</b> тарифа (или пропустите):",
-        reply_markup=skip_kb,
-        parse_mode='HTML'
-    )
+    await message.answer("📝 Введите <b>описание</b> (или пропустите):", reply_markup=skip_kb, parse_mode='HTML')
 
 
 @router.callback_query(F.data == "admin_plan_skip_desc", F.from_user.id.in_(ADMIN_IDS))
@@ -258,7 +258,7 @@ async def admin_plan_description(message: Message, state: FSMContext):
 
 async def _finish_create_plan(message, state: FSMContext):
     data = await state.get_data()
-    plan_id = await create_plan(
+    await create_plan(
         name=data["plan_name"],
         price=data["plan_price"],
         duration_days=data["plan_duration"],
@@ -288,7 +288,6 @@ PLAN_FIELD_LABELS = {
 @router.callback_query(F.data.startswith("admin_plan_edit_"), F.from_user.id.in_(ADMIN_IDS))
 async def admin_plan_edit_field(callback: CallbackQuery, state: FSMContext):
     await callback.answer()
-    # формат: admin_plan_edit_{plan_id}_{field}
     parts = callback.data.replace("admin_plan_edit_", "").rsplit("_", 1)
     if len(parts) != 2:
         return
@@ -330,11 +329,7 @@ async def admin_plan_edit_value(message: Message, state: FSMContext):
 
     await update_plan(plan_id, **{field: value})
     await state.clear()
-    await message.answer(
-        f"✅ Поле обновлено.",
-        reply_markup=await plans_admin_kb(),
-        parse_mode='HTML'
-    )
+    await message.answer("✅ Поле обновлено.", reply_markup=await plans_admin_kb(), parse_mode='HTML')
 
 
 # ===========================
@@ -376,23 +371,15 @@ async def promos_admin_kb() -> InlineKeyboardMarkup:
 @router.callback_query(F.data == "admin_promos", F.from_user.id.in_(ADMIN_IDS))
 async def admin_promos_list(callback: CallbackQuery):
     await callback.answer()
-    await callback.message.edit_text(
-        "🎟 <b>Промокоды</b>",
-        reply_markup=await promos_admin_kb(),
-        parse_mode='HTML'
-    )
+    await callback.message.edit_text("🎟 <b>Промокоды</b>", reply_markup=await promos_admin_kb(), parse_mode='HTML')
 
-
-# ===========================
-# Создание промокода
-# ===========================
 
 @router.callback_query(F.data == "admin_promo_create", F.from_user.id.in_(ADMIN_IDS))
 async def admin_promo_create_start(callback: CallbackQuery, state: FSMContext):
     await callback.answer()
     await state.set_state(AdminStates.promo_code)
     await callback.message.edit_text(
-        "🎟 <b>Новый промокод</b>\n\nВведите <b>код</b> (латиница/цифры, например: <code>SAVE20</code>):",
+        "🎟 <b>Новый промокод</b>\n\nВведите <b>код</b> (например: <code>SAVE20</code>):",
         parse_mode='HTML'
     )
 
@@ -405,10 +392,7 @@ async def admin_promo_code(message: Message, state: FSMContext):
         return
     await state.update_data(new_promo_code=code)
     await state.set_state(AdminStates.promo_discount)
-    await message.answer(
-        f"💸 Введите <b>скидку в %</b> (1–99, например: <code>20</code>):",
-        parse_mode='HTML'
-    )
+    await message.answer("💸 Введите <b>скидку в %</b> (1–99):", parse_mode='HTML')
 
 
 @router.message(AdminStates.promo_discount, F.from_user.id.in_(ADMIN_IDS))
@@ -425,11 +409,7 @@ async def admin_promo_discount(message: Message, state: FSMContext):
     skip_kb = InlineKeyboardMarkup(inline_keyboard=[
         [InlineKeyboardButton(text="♾ Без ограничений", callback_data="admin_promo_unlimited")]
     ])
-    await message.answer(
-        "🔢 Введите <b>максимальное кол-во использований</b> (или без ограничений):",
-        reply_markup=skip_kb,
-        parse_mode='HTML'
-    )
+    await message.answer("🔢 Введите <b>макс. кол-во использований</b>:", reply_markup=skip_kb, parse_mode='HTML')
 
 
 @router.callback_query(F.data == "admin_promo_unlimited", F.from_user.id.in_(ADMIN_IDS))
@@ -459,70 +439,87 @@ async def _finish_create_promo(message, state: FSMContext):
     await state.clear()
     uses_text = f"Макс. использований: {max_uses}" if max_uses else "Без ограничений"
     await message.answer(
-        f"✅ Промокод <b>{code}</b> создан!\n"
-        f"Скидка: <b>{discount}%</b>\n{uses_text}",
+        f"✅ Промокод <b>{code}</b> создан!\nСкидка: <b>{discount}%</b>\n{uses_text}",
         reply_markup=await promos_admin_kb(),
         parse_mode='HTML'
     )
 
-
-# ===========================
-# Удаление промокода
-# ===========================
 
 @router.callback_query(F.data.startswith("admin_promo_del_"), F.from_user.id.in_(ADMIN_IDS))
 async def admin_promo_delete(callback: CallbackQuery):
     promo_id = callback.data.replace("admin_promo_del_", "")
     await delete_promo(promo_id)
     await callback.answer("🗑 Промокод удалён")
+    await callback.message.edit_text("🎟 <b>Промокоды</b>", reply_markup=await promos_admin_kb(), parse_mode='HTML')
+
+
+# ===========================
+# 📢 Рассылка — выбор режима
+# ===========================
+
+def broadcast_mode_kb() -> InlineKeyboardMarkup:
+    return InlineKeyboardMarkup(inline_keyboard=[
+        [
+            InlineKeyboardButton(text="👥 Всем",   callback_data="broadcast_all"),
+            InlineKeyboardButton(text="🎯 По ID",  callback_data="broadcast_by_id"),
+        ],
+        [InlineKeyboardButton(text="❌ Отмена", callback_data="admin_main")],
+    ])
+
+
+@router.callback_query(F.data == "admin_broadcast", F.from_user.id.in_(ADMIN_IDS))
+async def admin_broadcast_menu(callback: CallbackQuery, state: FSMContext):
+    await callback.answer()
+    await state.clear()
     await callback.message.edit_text(
-        "🎟 <b>Промокоды</b>",
-        reply_markup=await promos_admin_kb(),
+        "📢 <b>Рассылка</b>\n\nВыбери режим отправки:",
+        reply_markup=broadcast_mode_kb(),
         parse_mode='HTML'
     )
 
 
 # ===========================
-# Рассылка
+# 📢 Рассылка — Всем
 # ===========================
 
-@router.callback_query(F.data == "admin_broadcast", F.from_user.id.in_(ADMIN_IDS))
-async def admin_broadcast_start(callback: CallbackQuery, state: FSMContext):
+@router.callback_query(F.data == "broadcast_all", F.from_user.id.in_(ADMIN_IDS))
+async def broadcast_all_start(callback: CallbackQuery, state: FSMContext):
     await callback.answer()
-    await state.set_state(AdminStates.broadcast_text)
+    await state.set_state(AdminStates.broadcast_text_all)
     cancel_kb = InlineKeyboardMarkup(inline_keyboard=[
-        [InlineKeyboardButton(text="❌ Отмена", callback_data="admin_main")]
+        [InlineKeyboardButton(text="❌ Отмена", callback_data="admin_broadcast")]
     ])
+    total = await count_users()
     await callback.message.edit_text(
-        "📢 <b>Рассылка</b>\n\nВведите текст сообщения.\n"
-        "Поддерживается HTML-форматирование: <b>жирный</b>, <i>курсив</i>, <code>код</code>.",
+        f"👥 <b>Рассылка всем</b> ({total} пользователей)\n\n"
+        "Введи текст сообщения.\n"
+        "<i>Поддерживается HTML: <b>жирный</b>, <i>курсив</i>, <code>код</code></i>",
         reply_markup=cancel_kb,
         parse_mode='HTML'
     )
 
 
-@router.message(AdminStates.broadcast_text, F.from_user.id.in_(ADMIN_IDS))
-async def admin_broadcast_send(message: Message, state: FSMContext, bot: Bot):
-    text = message.text or message.caption or ""
+@router.message(AdminStates.broadcast_text_all, F.from_user.id.in_(ADMIN_IDS))
+async def broadcast_all_send(message: Message, state: FSMContext, bot: Bot):
+    text = message.html_text or message.text or ""
     if not text.strip():
         await message.answer("❌ Пустое сообщение.")
         return
 
     await state.clear()
-
     user_ids = await get_all_users()
     total = len(user_ids)
-    status_msg = await message.answer(f"📢 Начинаю рассылку на {total} пользователей...")
+    status_msg = await message.answer(f"📤 Начинаю рассылку на <b>{total}</b> пользователей...", parse_mode='HTML')
 
     sent, failed = 0, 0
-    for i, user_id in enumerate(user_ids, 1):
+    for i, uid in enumerate(user_ids, 1):
         try:
-            await bot.send_message(user_id, text, parse_mode='HTML')
+            await bot.send_message(uid, text, parse_mode='HTML')
             sent += 1
         except Exception:
             failed += 1
         if i % 30 == 0:
-            await asyncio.sleep(1)  # анти-флуд
+            await asyncio.sleep(1)
 
     await status_msg.edit_text(
         f"✅ <b>Рассылка завершена!</b>\n\n"
@@ -535,7 +532,107 @@ async def admin_broadcast_send(message: Message, state: FSMContext, bot: Bot):
 
 
 # ===========================
-# Управление лекциями (заглушка — основная логика в lectures.py)
+# 📢 Рассылка — По ID
+# ===========================
+
+@router.callback_query(F.data == "broadcast_by_id", F.from_user.id.in_(ADMIN_IDS))
+async def broadcast_by_id_start(callback: CallbackQuery, state: FSMContext):
+    await callback.answer()
+    await state.set_state(AdminStates.broadcast_ids)
+    cancel_kb = InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton(text="❌ Отмена", callback_data="admin_broadcast")]
+    ])
+    await callback.message.edit_text(
+        "🎯 <b>Рассылка по ID</b>\n\n"
+        "Введи один или несколько Telegram ID через запятую или пробел:\n\n"
+        "<i>Пример: <code>123456789, 987654321, 111222333</code></i>",
+        reply_markup=cancel_kb,
+        parse_mode='HTML'
+    )
+
+
+@router.message(AdminStates.broadcast_ids, F.from_user.id.in_(ADMIN_IDS))
+async def broadcast_by_id_got_ids(message: Message, state: FSMContext):
+    raw = message.text.strip()
+
+    # Парсим все числа из строки
+    id_strings = re.findall(r'\d+', raw)
+    if not id_strings:
+        await message.answer(
+            "❌ Не найдено ни одного ID. Введи числа через запятую или пробел:"
+        )
+        return
+
+    target_ids = list(set(int(x) for x in id_strings))  # убираем дубли
+    await state.update_data(broadcast_target_ids=target_ids)
+    await state.set_state(AdminStates.broadcast_text_ids)
+
+    cancel_kb = InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton(text="❌ Отмена", callback_data="admin_broadcast")]
+    ])
+    ids_preview = ", ".join(str(x) for x in target_ids[:10])
+    if len(target_ids) > 10:
+        ids_preview += f" и ещё {len(target_ids) - 10}..."
+
+    await message.answer(
+        f"✅ Получателей: <b>{len(target_ids)}</b>\n"
+        f"<code>{ids_preview}</code>\n\n"
+        "Теперь введи текст сообщения:\n"
+        "<i>Поддерживается HTML: <b>жирный</b>, <i>курсив</i>, <code>код</code></i>",
+        reply_markup=cancel_kb,
+        parse_mode='HTML'
+    )
+
+
+@router.message(AdminStates.broadcast_text_ids, F.from_user.id.in_(ADMIN_IDS))
+async def broadcast_by_id_send(message: Message, state: FSMContext, bot: Bot):
+    text = message.html_text or message.text or ""
+    if not text.strip():
+        await message.answer("❌ Пустое сообщение.")
+        return
+
+    data = await state.get_data()
+    target_ids = data.get("broadcast_target_ids", [])
+    await state.clear()
+
+    if not target_ids:
+        await message.answer("❌ Список ID пуст. Начни заново.")
+        return
+
+    status_msg = await message.answer(
+        f"📤 Отправляю на <b>{len(target_ids)}</b> адресов...",
+        parse_mode='HTML'
+    )
+
+    sent, failed, not_found = 0, 0, []
+    for uid in target_ids:
+        try:
+            await bot.send_message(uid, text, parse_mode='HTML')
+            sent += 1
+        except Exception:
+            failed += 1
+            not_found.append(uid)
+        await asyncio.sleep(0.05)  # небольшая пауза между запросами
+
+    failed_text = ""
+    if not_found:
+        ids_str = ", ".join(str(x) for x in not_found[:15])
+        if len(not_found) > 15:
+            ids_str += f" и ещё {len(not_found) - 15}..."
+        failed_text = f"\n\n⚠️ <b>Не доставлено:</b>\n<code>{ids_str}</code>"
+
+    await status_msg.edit_text(
+        f"✅ <b>Рассылка завершена!</b>\n\n"
+        f"• Доставлено: <b>{sent}</b>\n"
+        f"• Ошибки: <b>{failed}</b>"
+        f"{failed_text}",
+        reply_markup=kb.admin_panel,
+        parse_mode='HTML'
+    )
+
+
+# ===========================
+# Noop / заглушка
 # ===========================
 
 @router.callback_query(F.data == "noop")

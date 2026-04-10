@@ -61,3 +61,20 @@
 Основные изменения:
     1. Команда /wallet в biling.py
     2. Фото к сообщениям
+    короче я сделал
+    1) рассылку по id тебе должно было сообщение прийти
+    2) музыку сделал но она чето не работает, надо будет фиксить, для нее себе установишь эти зависимости:
+pip install yt-dlp --break-system-packages
+apt-get install ffmpeg -y   # или: sudo apt install ffmpeg
+    3) раздел мои ХР и их начисление сделал за туду лист и за помидор таймер, остается выбрать за что начислять еще и добавить там по пару строк кода
+Шаг 4. Добавьте XP в handlers/user.py
+В каждый нужный хендлер добавьте одну строку. Примеры:
+питон# После отправки ответа репетитора (в tutor_handle_text):
+from services.xp import give_xp
+await give_xp(bot, message.from_user.id, "tutor_message")
+
+# После решения калькулятором (в calc_handle_text):
+await give_xp(bot, message.from_user.id, "calc_text")
+
+# После скачивания лекции (в lectures.py, user_get_lecture):
+await give_xp(bot, callback.bot, callback.from_user.id, "lecture_downloaded")
