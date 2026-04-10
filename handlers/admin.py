@@ -80,10 +80,10 @@ async def back_home(callback: CallbackQuery):
         reply_markup = kb.get_locked_kb(is_admin_check)
 
     await callback.message.edit_text(
-        '<b>Привет! Я математический бот Math Tutor 🤖</b>\n'
-        'Я могу помочь тебе разобраться в математике, сделать из эксперта '
-        'по математическому анализу, дать почитать лекции и это еще не все 😉\n\n'
-        'Выбери нужный раздел:',
+        '👋 <b>Добро пожаловать в Math Tutor!</b>\n\n'
+        '🤖 Я помогу тебе с математикой, прослежу за твоим расписанием '
+        'и автоматически отмечу тебя на парах.\n\n'
+        '👇 Выбери раздел:',
         reply_markup=reply_markup,
         parse_mode='HTML'
     )

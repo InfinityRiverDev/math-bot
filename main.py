@@ -25,6 +25,7 @@ from services import pomodoro
 
 from middlewares.subscription_check import SubscriptionMiddleware
 from handlers.billing import yookassa_webhook
+from handlers import help as help_handler
 
 load_dotenv()
 
@@ -35,14 +36,14 @@ WEBHOOK_PORT = int(os.getenv("PORT", 8080))
 if not TOKEN:
     raise ValueError("❌ TOKEN не найден в .env")
 
-# if PROXY:
-#     print(f"🌐 Использую прокси: {PROXY}")
-#     session = AiohttpSession(proxy=PROXY)
-# else:
-#     print("🌐 Запуск без прокси")
-#     session = AiohttpSession()
+if PROXY:
+    print(f"🌐 Использую прокси: {PROXY}")
+    session = AiohttpSession(proxy=PROXY)
+else:
+    print("🌐 Запуск без прокси")
+    session = AiohttpSession()
 
-session = AiohttpSession()
+# session = AiohttpSession()
 
 bot = Bot(
     token=TOKEN,
@@ -70,10 +71,11 @@ async def main():
     dp.include_router(registration.router)
     dp.include_router(profile.router)
     dp.include_router(admin.router)
-    dp.include_router(billing.router)       # ⬅️ кошелёк и оплата
+    dp.include_router(billing.router)
     dp.include_router(schedule.router)
     dp.include_router(lectures.router)
     dp.include_router(attendance.router)
+    dp.include_router(help_handler.router)
     dp.include_router(user.router)
     dp.include_router(pomodoro.router)
 

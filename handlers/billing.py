@@ -22,11 +22,12 @@ import aiohttp
 from datetime import datetime
 
 from aiogram import F, Router, Bot
+from aiogram.filters import Command
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
 from aiogram.types import (
     CallbackQuery, Message,
-    InlineKeyboardMarkup, InlineKeyboardButton
+    InlineKeyboardMarkup, InlineKeyboardButton, FSInputFile
 )
 from aiohttp import web
 from dotenv import load_dotenv
@@ -100,6 +101,63 @@ def confirm_plan_kb(plan_id: str, final_price: float, has_promo: bool) -> Inline
         )])
     buttons.append([InlineKeyboardButton(text="⬅️ Назад", callback_data="wallet_buy_plan")])
     return InlineKeyboardMarkup(inline_keyboard=buttons)
+
+
+# ===========================
+# Команда /wallet
+# ===========================
+async def show_wallet(event, state: FSMContext):
+    await state.clear()
+
+    # Определяем тип (Message или CallbackQuery)
+    if isinstance(event, CallbackQuery):
+        user_id = event.from_user.id
+        message = event.message
+        await event.answer()
+        is_callback = True
+    else:
+        user_id = event.from_user.id
+        message = event
+        is_callback = False
+
+    balance = await get_balance(user_id)
+    sub = await get_active_subscription(user_id)
+
+    if sub:
+        expires = datetime.fromisoformat(sub["expires_at"])
+        delta = expires - datetime.now()
+        days_left = max(0, delta.days)
+
+        sub_text = (
+            f"\n\n🟢 <b>Тариф:</b> {sub['plan_name']}\n"
+            f"⏳ <b>Осталось:</b> {days_left} дн. (до {expires.strftime('%d.%m.%Y')})"
+        )
+    else:
+        sub_text = "\n\n🔴 <b>Тариф:</b> не активен"
+
+    text = (
+        f"💼 <b>Мой кошелёк</b>\n\n"
+        f"💰 <b>Баланс:</b> {balance:.2f}₽"
+        f"{sub_text}"
+    )
+
+    # Универсальная отправка
+    if is_callback:
+        await message.edit_text(
+            text,
+            reply_markup=wallet_kb(),
+            parse_mode='HTML'
+        )
+    else:
+        await message.answer(
+            text,
+            reply_markup=wallet_kb(),
+            parse_mode='HTML'
+        )
+
+@router.message(Command("wallet"))
+async def wallet_command(message: Message, state: FSMContext):
+    await show_wallet(message, state)
 
 
 # ===========================
@@ -516,15 +574,17 @@ async def yookassa_webhook(request: web.Request) -> web.Response:
     # Уведомляем пользователя
     # bot передаётся через app["bot"] в main.py
     bot: Bot = request.app.get("bot")
+    photo = FSInputFile("media/notifications/notification_replenishment_wallet.png")
     if bot:
         try:
             await bot.send_sticker(
                 chat_id=user_id,
                 sticker="CAACAgIAAxkBAAFG27Vp2C6_dKdMZFcMIaLXlAtVzhYQTQACqpUAAkaOwUqS3PLOvG5XhTsE"
             )
-            await bot.send_message(
+            await bot.send_photo(
                 user_id,
-                f"✅ <b>Кошелёк пополнен на {amount:.0f}₽!</b>\n\n"
+                photo=photo,
+                caption=f"✅ <b>Кошелёк пополнен на {amount:.0f}₽!</b>\n\n"
                 f"Средства зачислены и доступны для оплаты тарифа.",
                 parse_mode='HTML'
             )

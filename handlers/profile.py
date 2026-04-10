@@ -3,7 +3,7 @@ import hashlib
 from aiogram import F, Router
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
-from aiogram.types import CallbackQuery, Message, InlineKeyboardMarkup, InlineKeyboardButton
+from aiogram.types import CallbackQuery, Message, InlineKeyboardMarkup, InlineKeyboardButton, FSInputFile
 
 from database.models import get_user_profile, delete_user_profile, check_password
 import keyboards.user_kb as kb
@@ -156,8 +156,10 @@ async def profile_delete_password(message: Message, state: FSMContext):
     await delete_user_profile(user_id)
     await state.clear()
 
-    await message.answer(
-        "✅ <b>Профиль успешно удалён.</b>\n\n"
+    photo = FSInputFile("media/notifications/notification _delete_profile.png")
+    await message.answer_photo(
+        photo=photo,
+        caption="✅ <b>Профиль успешно удалён.</b>\n\n"
         "Все ваши данные были удалены из системы.\n"
         "Для повторной регистрации нажмите /start",
         parse_mode='HTML'

@@ -16,6 +16,7 @@ from services.calculator import solve_math, solve_from_image
 from database.models import register_user
 from database.models import get_history, update_history
 
+
 router = Router()
 
 
@@ -38,10 +39,10 @@ async def cmd_start(message: Message, state: FSMContext):
     is_admin = user_id in ADMIN_IDS
 
     await message.answer(
-        '<b>Привет! Я математический бот Math Tutor 🤖</b>\n'
-            'Я могу помочь тебе разобраться в математике, сделать из эксперта '
-            'по математическому анализу, дать почитать лекции и это еще не все 😉\n\n'
-            'Выбери нужный раздел:',
+        '👋 <b>Добро пожаловать в Math Tutor!</b>\n\n'
+                    '🤖 Я помогу тебе с математикой, прослежу за твоим расписанием '
+                    'и автоматически отмечу тебя на парах.\n\n'
+                    '👇 Выбери раздел:',
         reply_markup=kb.get_start_kb(is_admin),
         parse_mode='HTML'
     )
