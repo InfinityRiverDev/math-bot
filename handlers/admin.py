@@ -19,7 +19,8 @@ from dotenv import load_dotenv
 from database.models import count_users, get_all_users
 from database.billing_models import (
     get_all_plans, get_plan, create_plan, update_plan, delete_plan,
-    get_all_promo_codes, create_promo, delete_promo
+    get_all_promo_codes, create_promo, delete_promo,
+    has_active_subscription
 )
 import keyboards.user_kb as kb
 
@@ -71,12 +72,19 @@ async def admin_menu(callback: CallbackQuery):
 @router.callback_query(F.data == "back_to_main")
 async def back_home(callback: CallbackQuery):
     is_admin_check = callback.from_user.id in ADMIN_IDS
+    has_sub = await has_active_subscription(callback.from_user.id)
+
+    if is_admin_check or has_sub:
+        reply_markup = kb.get_start_kb(is_admin_check)
+    else:
+        reply_markup = kb.get_locked_kb(is_admin_check)
+
     await callback.message.edit_text(
         '<b>Привет! Я математический бот Math Tutor 🤖</b>\n'
         'Я могу помочь тебе разобраться в математике, сделать из эксперта '
         'по математическому анализу, дать почитать лекции и это еще не все 😉\n\n'
         'Выбери нужный раздел:',
-        reply_markup=kb.get_start_kb(is_admin_check),
+        reply_markup=reply_markup,
         parse_mode='HTML'
     )
     await callback.answer()

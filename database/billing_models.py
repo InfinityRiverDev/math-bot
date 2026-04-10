@@ -134,7 +134,8 @@ async def create_promo(code: str, discount_percent: int, max_uses: int = 0) -> s
 
 
 async def delete_promo(promo_id: str):
-    await promo_codes.update_one({"_id": ObjectId(promo_id)}, {"$set": {"active": False}})
+    """Полное удаление промокода из базы."""
+    await promo_codes.delete_one({"_id": ObjectId(promo_id)})
 
 
 async def use_promo(code: str):

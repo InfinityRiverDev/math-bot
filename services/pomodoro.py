@@ -179,17 +179,17 @@ async def _start_work_session(callback: CallbackQuery, state: FSMContext):
 # =========================
 async def _run_timer(callback: CallbackQuery, state: FSMContext, total: int, phase: str):
     """
-    Тикает каждые 30 секунд и обновляет сообщение.
+    Тикает каждую секунду и обновляет сообщение каждые 5 секунд.
     В конце — уведомляет и переходит к следующей фазе.
     """
-    UPDATE_INTERVAL = 30  # обновляем каждые 30 сек (чтобы не флудить API)
+    UPDATE_INTERVAL = 5   # обновляем отображение каждые 5 сек (баланс между точностью и лимитами API)
+    TICK = 1              # внутренний тик — 1 секунда
     elapsed = 0
+    last_update = 0
     msg = callback.message
 
     while elapsed < total:
-        # Ждём кусочек времени
-        sleep_chunk = min(UPDATE_INTERVAL, total - elapsed)
-        await asyncio.sleep(sleep_chunk)
+        await asyncio.sleep(TICK)
 
         # Проверяем флаги
         data = await state.get_data()
@@ -203,17 +203,20 @@ async def _run_timer(callback: CallbackQuery, state: FSMContext, total: int, pha
                 data = await state.get_data()
                 if data.get("stop_flag"):
                     return
-            # После снятия паузы — продолжаем без прибавки elapsed
             continue
 
-        elapsed += sleep_chunk
+        elapsed += TICK
 
         # Пропуск перерыва
         if phase == "break" and data.get("skip_break_flag"):
             await state.update_data(skip_break_flag=False)
             break
 
-        # Обновляем сообщение
+        # Обновляем сообщение раз в UPDATE_INTERVAL секунд
+        if elapsed - last_update < UPDATE_INTERVAL and elapsed < total:
+            continue
+        last_update = elapsed
+
         remaining = total - elapsed
         data = await state.get_data()
         cycles = data.get("cycles_done", 0)

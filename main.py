@@ -56,6 +56,7 @@ dp = Dispatcher()
 async def set_commands(bot: Bot):
     commands = [
         BotCommand(command="start",  description="🤖 Главное меню"),
+        BotCommand(command="wallet", description="💼 Кошелёк"),
         BotCommand(command="cancel", description="🚫 Отмена"),
         BotCommand(command="help",   description="ℹ️ Помощь"),
     ]

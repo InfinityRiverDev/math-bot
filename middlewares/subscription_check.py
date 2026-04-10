@@ -50,7 +50,7 @@ ALLOWED_PREFIXES = (
 )
 
 # Команды, всегда разрешённые
-ALLOWED_COMMANDS = {"/start", "/cancel", "/help"}
+ALLOWED_COMMANDS = {"/start", "/cancel", "/help", "/wallet"}
 
 
 LOCKED_MESSAGE = (
