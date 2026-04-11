@@ -16,6 +16,7 @@ from database.lectures_models import (
     get_lectures_by_subject, add_lecture,
     delete_subject, delete_lecture
 )
+from database.stats_models import log_activity
 from handlers.admin import ADMIN_IDS
 
 router = Router()
@@ -165,6 +166,7 @@ async def user_get_lecture(callback: CallbackQuery, bot: Bot):
             caption=f"📄 <b>{title}</b>",
             parse_mode='HTML'
         )
+        log_activity()
         await callback.answer("✅ Лекция отправлена!")
     except Exception as e:
         await callback.answer(f"❌ Ошибка: {str(e)}", show_alert=True)

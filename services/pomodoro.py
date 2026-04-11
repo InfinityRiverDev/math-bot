@@ -4,6 +4,7 @@ from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
 from aiogram.types import CallbackQuery, Message, InlineKeyboardMarkup, InlineKeyboardButton
 from aiogram.exceptions import TelegramBadRequest
+from database.stats_models import log_activity
 
 router = Router()
 
@@ -293,6 +294,8 @@ async def _on_work_done(callback: CallbackQuery, state: FSMContext):
     # Бонус за 5 циклов:
     if cycles_done % 5 == 0:
         await give_xp(callback.bot, callback.from_user.id, "pomodoro_5cycles")
+
+    log_activity()
 
 
 # =========================

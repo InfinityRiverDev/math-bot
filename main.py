@@ -26,6 +26,7 @@ from services import pomodoro
 from middlewares.subscription_check import SubscriptionMiddleware
 from handlers.billing import yookassa_webhook
 from handlers import help as help_handler
+from handlers import stats as stats_handler
 from services import todo, music
 
 load_dotenv()
@@ -78,6 +79,7 @@ async def main():
     dp.include_router(attendance.router)
     dp.include_router(help_handler.router)
     dp.include_router(music.router)
+    dp.include_router(stats_handler.router)
     dp.include_router(user.router)
     dp.include_router(pomodoro.router)
     dp.include_router(todo.router)

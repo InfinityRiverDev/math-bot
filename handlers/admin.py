@@ -96,16 +96,16 @@ async def back_home(callback: CallbackQuery):
 # Статистика
 # ===========================
 
-@router.callback_query(F.data == "admin_statistics", F.from_user.id.in_(ADMIN_IDS))
-async def get_users_statistics(callback: CallbackQuery):
-    total = await count_users()
-    await callback.message.edit_text(
-        f"📊 <b>Статистика бота</b>\n\n"
-        f"• Всего пользователей в базе: <code>{total}</code>",
-        reply_markup=kb.admin_panel,
-        parse_mode='HTML'
-    )
-    await callback.answer()
+# @router.callback_query(F.data == "admin_statistics", F.from_user.id.in_(ADMIN_IDS))
+# async def get_users_statistics(callback: CallbackQuery):
+#     total = await count_users()
+#     await callback.message.edit_text(
+#         f"📊 <b>Статистика бота</b>\n\n"
+#         f"• Всего пользователей в базе: <code>{total}</code>",
+#         reply_markup=kb.admin_panel,
+#         parse_mode='HTML'
+#     )
+#     await callback.answer()
 
 
 # ===========================

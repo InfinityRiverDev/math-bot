@@ -15,6 +15,8 @@ from handlers.admin import ADMIN_IDS
 from services.calculator import solve_math, solve_from_image
 from database.models import register_user
 from database.models import get_history, update_history
+from services.xp import give_xp
+from database.stats_models import log_activity
 
 
 router = Router()
@@ -319,161 +321,163 @@ async def cmd_cancel(message: Message, state: FSMContext):
         reply_markup=kb.get_start_kb(message.from_user.id in ADMIN_IDS)
     )
 
+### Калькулятор
 
-# ========================
-# Калькулятор — вход
-# ========================
-
-@router.callback_query(F.data == 'calculator')
-async def open_calculator(callback: CallbackQuery, state: FSMContext):
-    await callback.answer()
-    await state.set_state(CalculatorStates.waiting_for_input)
-    await callback.message.edit_text(
-        '🧮 <b>Умный калькулятор</b>\n\n'
-        'Отправь мне задачу любым удобным способом:\n\n'
-        '✏️ <b>Текстом</b> — например: <code>2^10 + корень из 144</code>\n'
-        '📷 <b>Фото</b> — сфотографируй задачу из учебника\n'
-        '🎤 <b>Голосовым</b> — продиктуй задачу\n'
-        '📄 <b>Документом</b> — прикрепи файл с задачами\n\n'
-        'Для выхода напиши /cancel',
-        parse_mode='HTML'
-    )
-
-
-# ========================
-# Калькулятор — текст
-# ========================
-
-@router.message(CalculatorStates.waiting_for_input, F.text)
-async def handle_text(message: Message, state: FSMContext):
-    thinking_msg = await message.answer('🤔 Решаю задачу...')
-    task = asyncio.create_task(solve_math(message.text))
-    await state.update_data(current_task=task, cancelled=False)
-    try:
-        result = await task
-        await thinking_msg.delete()
-        await message.answer(f"\n{result}", parse_mode='HTML')
-    except asyncio.CancelledError:
-        try:
-            await thinking_msg.delete()
-        except:
-            pass
-
-
-# ========================
-# Калькулятор — фото
-# ========================
-
-@router.message(CalculatorStates.waiting_for_input, F.photo)
-async def handle_photo(message: Message, bot: Bot, state: FSMContext):
-    thinking_msg = await message.answer('📷 Распознаю текст на фото...')
-    photo = message.photo[-1]
-    file_in_io = io.BytesIO()
-    await bot.download(photo, destination=file_in_io)
-    image_bytes = file_in_io.getvalue()
-    await thinking_msg.edit_text('🤔 Решаю задачу...')
-    task = asyncio.create_task(solve_from_image(image_bytes))
-    await state.update_data(current_task=task, cancelled=False)
-    try:
-        result = await task
-        await thinking_msg.delete()
-        await message.answer(f"\n{result}", parse_mode='HTML')
-    except asyncio.CancelledError:
-        try:
-            await thinking_msg.delete()
-        except:
-            pass
-
-
-# ========================
-# Калькулятор — голосовое
-# ========================
-
-@router.message(CalculatorStates.waiting_for_input, F.voice)
-async def handle_voice(message: Message, bot: Bot, state: FSMContext):
-    thinking_msg = await message.answer('🎤 Распознаю голосовое сообщение...')
-    voice_buffer = io.BytesIO()
-    await bot.download(message.voice, destination=voice_buffer)
-    audio_bytes = voice_buffer.getvalue()
-
-    api_key = os.getenv("YANDEX_API_KEY")
-    folder_id = os.getenv("YANDEX_FOLDER_ID")
-
-    try:
-        async with aiohttp.ClientSession() as session:
-            async with session.post(
-                "https://stt.api.cloud.yandex.net/speech/v1/stt:recognize",
-                headers={"Authorization": f"Api-Key {api_key}"},
-                params={"lang": "ru-RU", "format": "oggopus", "folderId": folder_id},
-                data=audio_bytes
-            ) as resp:
-                data = await resp.json()
-                recognized_text = data.get("result", "")
-    except Exception:
-        recognized_text = ""
-
-    if not recognized_text:
-        await thinking_msg.delete()
-        await message.answer('❌ Не удалось распознать голосовое сообщение. Попробуй написать задачу текстом.')
-        return
-
-    await thinking_msg.edit_text(f'🤔 Решаю: <i>{recognized_text}</i>...', parse_mode='HTML')
-    task = asyncio.create_task(solve_math(recognized_text))
-    await state.update_data(current_task=task, cancelled=False)
-    try:
-        result = await task
-        await thinking_msg.delete()
-        await message.answer(f'🎤 <b>Распознано:</b> <i>{recognized_text}</i>\n\n{result}', parse_mode='HTML')
-    except asyncio.CancelledError:
-        try:
-            await thinking_msg.delete()
-        except:
-            pass
-
-
-# ========================
-# Калькулятор — документ
-# ========================
-
-@router.message(CalculatorStates.waiting_for_input, F.document)
-async def handle_document(message: Message, bot: Bot, state: FSMContext):
-    doc = message.document
-    mime = doc.mime_type or ""
-
-    if "text" not in mime and "pdf" not in mime:
-        await message.answer(
-            '❌ Поддерживаются только текстовые файлы (.txt).\n'
-            'Для PDF — сфотографируй страницу и пришли как фото.'
-        )
-        return
-
-    thinking_msg = await message.answer('📄 Читаю документ...')
-    file_in_io = io.BytesIO()
-    await bot.download(doc, destination=file_in_io)
-    file_bytes = file_in_io.getvalue()
-
-    try:
-        text = file_bytes.decode("utf-8")
-    except UnicodeDecodeError:
-        text = file_bytes.decode("cp1251", errors="ignore")
-
-    if not text.strip():
-        await thinking_msg.delete()
-        await message.answer('❌ Документ пустой или не удалось прочитать.')
-        return
-
-    await thinking_msg.edit_text('🤔 Решаю задачи из документа...')
-    task = asyncio.create_task(solve_math(f"Задачи из документа:\n{text[:3000]}"))
-    await state.update_data(current_task=task, cancelled=False)
-    try:
-        result = await task
-        await thinking_msg.delete()
-        await message.answer(f"\n{result}", parse_mode='HTML')
-    except asyncio.CancelledError:
-        try:
-            await thinking_msg.delete()
-        except:
-            pass
+# # ========================
+# # Калькулятор — вход
+# # ========================
+#
+# @router.callback_query(F.data == 'calculator')
+# async def open_calculator(callback: CallbackQuery, state: FSMContext):
+#     await callback.answer()
+#     await state.set_state(CalculatorStates.waiting_for_input)
+#     await callback.message.edit_text(
+#         '🧮 <b>Умный калькулятор</b>\n\n'
+#         'Отправь мне задачу любым удобным способом:\n\n'
+#         '✏️ <b>Текстом</b> — например: <code>2^10 + корень из 144</code>\n'
+#         '📷 <b>Фото</b> — сфотографируй задачу из учебника\n'
+#         '🎤 <b>Голосовым</b> — продиктуй задачу\n'
+#         '📄 <b>Документом</b> — прикрепи файл с задачами\n\n'
+#         'Для выхода напиши /cancel',
+#         parse_mode='HTML'
+#     )
+#
+#
+# # ========================
+# # Калькулятор — текст
+# # ========================
+#
+# @router.message(CalculatorStates.waiting_for_input, F.text)
+# async def handle_text(message: Message, state: FSMContext):
+#     thinking_msg = await message.answer('🤔 Решаю задачу...')
+#     task = asyncio.create_task(solve_math(message.text))
+#     await state.update_data(current_task=task, cancelled=False)
+#     try:
+#         result = await task
+#         await thinking_msg.delete()
+#         await message.answer(f"\n{result}", parse_mode='HTML')
+#         log_activity()
+#     except asyncio.CancelledError:
+#         try:
+#             await thinking_msg.delete()
+#         except:
+#             pass
+#
+#
+# # ========================
+# # Калькулятор — фото
+# # ========================
+#
+# @router.message(CalculatorStates.waiting_for_input, F.photo)
+# async def handle_photo(message: Message, bot: Bot, state: FSMContext):
+#     thinking_msg = await message.answer('📷 Распознаю текст на фото...')
+#     photo = message.photo[-1]
+#     file_in_io = io.BytesIO()
+#     await bot.download(photo, destination=file_in_io)
+#     image_bytes = file_in_io.getvalue()
+#     await thinking_msg.edit_text('🤔 Решаю задачу...')
+#     task = asyncio.create_task(solve_from_image(image_bytes))
+#     await state.update_data(current_task=task, cancelled=False)
+#     try:
+#         result = await task
+#         await thinking_msg.delete()
+#         await message.answer(f"\n{result}", parse_mode='HTML')
+#     except asyncio.CancelledError:
+#         try:
+#             await thinking_msg.delete()
+#         except:
+#             pass
+#
+#
+# # ========================
+# # Калькулятор — голосовое
+# # ========================
+#
+# @router.message(CalculatorStates.waiting_for_input, F.voice)
+# async def handle_voice(message: Message, bot: Bot, state: FSMContext):
+#     thinking_msg = await message.answer('🎤 Распознаю голосовое сообщение...')
+#     voice_buffer = io.BytesIO()
+#     await bot.download(message.voice, destination=voice_buffer)
+#     audio_bytes = voice_buffer.getvalue()
+#
+#     api_key = os.getenv("YANDEX_API_KEY")
+#     folder_id = os.getenv("YANDEX_FOLDER_ID")
+#
+#     try:
+#         async with aiohttp.ClientSession() as session:
+#             async with session.post(
+#                 "https://stt.api.cloud.yandex.net/speech/v1/stt:recognize",
+#                 headers={"Authorization": f"Api-Key {api_key}"},
+#                 params={"lang": "ru-RU", "format": "oggopus", "folderId": folder_id},
+#                 data=audio_bytes
+#             ) as resp:
+#                 data = await resp.json()
+#                 recognized_text = data.get("result", "")
+#     except Exception:
+#         recognized_text = ""
+#
+#     if not recognized_text:
+#         await thinking_msg.delete()
+#         await message.answer('❌ Не удалось распознать голосовое сообщение. Попробуй написать задачу текстом.')
+#         return
+#
+#     await thinking_msg.edit_text(f'🤔 Решаю: <i>{recognized_text}</i>...', parse_mode='HTML')
+#     task = asyncio.create_task(solve_math(recognized_text))
+#     await state.update_data(current_task=task, cancelled=False)
+#     try:
+#         result = await task
+#         await thinking_msg.delete()
+#         await message.answer(f'🎤 <b>Распознано:</b> <i>{recognized_text}</i>\n\n{result}', parse_mode='HTML')
+#     except asyncio.CancelledError:
+#         try:
+#             await thinking_msg.delete()
+#         except:
+#             pass
+#
+#
+# # ========================
+# # Калькулятор — документ
+# # ========================
+#
+# @router.message(CalculatorStates.waiting_for_input, F.document)
+# async def handle_document(message: Message, bot: Bot, state: FSMContext):
+#     doc = message.document
+#     mime = doc.mime_type or ""
+#
+#     if "text" not in mime and "pdf" not in mime:
+#         await message.answer(
+#             '❌ Поддерживаются только текстовые файлы (.txt).\n'
+#             'Для PDF — сфотографируй страницу и пришли как фото.'
+#         )
+#         return
+#
+#     thinking_msg = await message.answer('📄 Читаю документ...')
+#     file_in_io = io.BytesIO()
+#     await bot.download(doc, destination=file_in_io)
+#     file_bytes = file_in_io.getvalue()
+#
+#     try:
+#         text = file_bytes.decode("utf-8")
+#     except UnicodeDecodeError:
+#         text = file_bytes.decode("cp1251", errors="ignore")
+#
+#     if not text.strip():
+#         await thinking_msg.delete()
+#         await message.answer('❌ Документ пустой или не удалось прочитать.')
+#         return
+#
+#     await thinking_msg.edit_text('🤔 Решаю задачи из документа...')
+#     task = asyncio.create_task(solve_math(f"Задачи из документа:\n{text[:3000]}"))
+#     await state.update_data(current_task=task, cancelled=False)
+#     try:
+#         result = await task
+#         await thinking_msg.delete()
+#         await message.answer(f"\n{result}", parse_mode='HTML')
+#     except asyncio.CancelledError:
+#         try:
+#             await thinking_msg.delete()
+#         except:
+#             pass
 
 
 # ========================
@@ -502,7 +506,7 @@ async def open_tutor(callback: CallbackQuery, state: FSMContext):
 # ========================
 
 @router.message(CalculatorStates.tutor_waiting, F.text)
-async def tutor_handle_text(message: Message, state: FSMContext):
+async def tutor_handle_text(message: Message, state: FSMContext, bot: Bot):
     res_msg = await message.answer("🤔 <b>Думаю...</b>", parse_mode='HTML')
     await state.update_data(cancelled=False)
     history = await get_history(message.from_user.id)
@@ -549,6 +553,10 @@ async def tutor_handle_text(message: Message, state: FSMContext):
         history.append({"role": "user", "content": message.text})
         history.append({"role": "assistant", "content": final_text})
         await update_history(message.from_user.id, history[-10:])
+        log_activity()
+
+        await give_xp(bot, message.from_user.id, "tutor_message")
+
         await state.update_data(current_task=None)
     except asyncio.CancelledError:
         try:
@@ -702,6 +710,9 @@ async def tutor_handle_voice(message: Message, state: FSMContext, bot: Bot):
         history.append({"role": "user", "content": user_text})
         history.append({"role": "assistant", "content": final_text})
         await update_history(message.from_user.id, history[-10:])
+
+        await give_xp(bot, message.from_user.id, "tutor_voice")
+
         await state.update_data(current_task=None)
 
     except asyncio.CancelledError:
@@ -803,7 +814,7 @@ async def tutor_handle_document(message: Message, state: FSMContext, bot: Bot):
 # ========================
 
 @router.message(CalculatorStates.practice_waiting, F.text)
-async def practice_handle_text(message: Message, state: FSMContext):
+async def practice_handle_text(message: Message, state: FSMContext, bot: Bot):
     res_msg = await message.answer("✍️ <b>Генерирую задачи...</b>", parse_mode='HTML')
     await state.update_data(cancelled=False)
 
@@ -830,6 +841,9 @@ async def practice_handle_text(message: Message, state: FSMContext):
 
     task = asyncio.create_task(stream_response())
     await state.update_data(current_task=task)
+    log_activity()
+
+    await give_xp(bot, message.from_user.id, "practice_request")
 
     try:
         await task

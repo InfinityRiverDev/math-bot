@@ -531,7 +531,7 @@ async def create_yookassa_payment(amount: float, payment_id: str, description: s
 # ЮKassa Webhook (aiohttp handler)
 # ===========================
 
-async def yookassa_webhook(request: web.Request) -> web.Response:
+async def yookassa_webhook(request: web.Request, bot: Bot) -> web.Response:
     """
     POST /yookassa/webhook
     Принимает уведомления от ЮKassa о статусе платежей.
@@ -569,6 +569,13 @@ async def yookassa_webhook(request: web.Request) -> web.Response:
     # Зачисляем деньги
     user_id = existing["user_id"]
     await top_up_balance(user_id, amount)
+
+    try:
+        from services.xp import give_xp
+        await give_xp(bot, user_id, "wallet_topup")
+    except Exception:
+        pass
+
     await update_payment_status(our_payment_id, "succeeded")
 
     # Уведомляем пользователя
@@ -577,10 +584,10 @@ async def yookassa_webhook(request: web.Request) -> web.Response:
     photo = FSInputFile("media/notifications/notification_replenishment_wallet.png")
     if bot:
         try:
-            await bot.send_sticker(
-                chat_id=user_id,
-                sticker="CAACAgIAAxkBAAFG27Vp2C6_dKdMZFcMIaLXlAtVzhYQTQACqpUAAkaOwUqS3PLOvG5XhTsE"
-            )
+            # await bot.send_sticker(
+            #     chat_id=user_id,
+            #     sticker="CAACAgIAAxkBAAFG27Vp2C6_dKdMZFcMIaLXlAtVzhYQTQACqpUAAkaOwUqS3PLOvG5XhTsE"
+            # )
             await bot.send_photo(
                 user_id,
                 photo=photo,

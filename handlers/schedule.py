@@ -18,6 +18,7 @@ from aiogram.types import CallbackQuery, Message, InlineKeyboardMarkup, InlineKe
 import keyboards.user_kb as kb
 from database.models import get_user_profile
 from handlers.registration import check_knrtu_auth
+from database.stats_models import log_activity
 
 router = Router()
 
@@ -329,6 +330,7 @@ async def cmd_schedule(callback: CallbackQuery, state: FSMContext):
     nav_kb = get_nav_kb(today)
 
     await loading_msg.edit_text(text, reply_markup=nav_kb, parse_mode='HTML')
+    log_activity()
 
 
 # =========================

@@ -1,22 +1,26 @@
 """
 handlers/music.py
 
-Поиск и скачивание музыки.
-Использует yt-dlp — умеет скачивать с VK, YouTube, SoundCloud и других источников.
+Функционал:
+- Ввод запроса → бот сразу скачивает первый результат
+- Кэш file_id в MongoDB (повторный запрос — мгновенно, без скачивания)
+- Anti-spam: не чаще 1 запроса в 15 секунд
+- Асинхронная загрузка через run_in_executor
+- История поиска (последние 10 уникальных запросов)
+- Красивое оформление: название, автор, длительность, подпись бота
 
-Установка зависимостей:
+Зависимости:
     pip install yt-dlp --break-system-packages
-    apt-get install ffmpeg   # или: pip install ffmpeg-python
-
-Подключить в main.py:
-    from handlers import music
-    dp.include_router(music.router)
+    apt-get install ffmpeg -y
 """
 
 import asyncio
+import hashlib
 import os
 import re
 import tempfile
+import time
+from datetime import datetime
 
 from aiogram import F, Router, Bot
 from aiogram.fsm.context import FSMContext
@@ -27,72 +31,94 @@ from aiogram.types import (
     FSInputFile
 )
 from aiogram.exceptions import TelegramBadRequest
+from database.stats_models import log_activity
+from database.mongo import db
 
 router = Router()
 
-# Максимальный размер файла для отправки в Telegram (50 МБ)
-MAX_FILE_MB = 50
+# =========================
+# 🗄 Коллекции MongoDB
+# =========================
+music_cache   = db["music_cache"]    # {cache_key, file_id, title, artist, duration, cached_at}
+music_history = db["music_history"]  # {user_id, query, title, ts}
 
-# Источники поиска (порядок важен — пробуем сверху вниз)
-# yt-dlp поддерживает ytsearch, scsearch и другие
-SEARCH_SOURCES = [
-    ("ytsearch1", "YouTube"),
-    ("scsearch1", "SoundCloud"),
-]
+# =========================
+# ⚙️ Константы
+# =========================
+MAX_FILE_MB      = 50
+ANTISPAM_SECONDS = 15
+HISTORY_LIMIT    = 10
+
+# Антиспам в памяти {user_id: last_request_timestamp}
+_last_request: dict[int, float] = {}
 
 
 # =========================
 # FSM
 # =========================
 class MusicStates(StatesGroup):
-    waiting_query = State()   # Ожидание названия трека
+    waiting_query = State()
 
 
 # =========================
-# Клавиатуры
+# 🎛 Клавиатуры
 # =========================
-def kb_music_cancel() -> InlineKeyboardMarkup:
+def kb_music_main() -> InlineKeyboardMarkup:
+    return InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton(text="🎵 Найти трек",      callback_data="music_search_start")],
+        [InlineKeyboardButton(text="📜 История поиска",  callback_data="music_history")],
+        [InlineKeyboardButton(text="⬅️ Назад",           callback_data="focus")],
+    ])
+
+
+def kb_cancel() -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(inline_keyboard=[
         [InlineKeyboardButton(text="❌ Отмена", callback_data="music_cancel")]
     ])
 
 
-def kb_music_back() -> InlineKeyboardMarkup:
+def kb_after_track() -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(inline_keyboard=[
-        [
-            InlineKeyboardButton(text="🎵 Ещё трек", callback_data="music"),
-            InlineKeyboardButton(text="⬅️ В меню",   callback_data="focus"),
-        ]
+        [InlineKeyboardButton(text="🎵 Ещё трек",      callback_data="music_search_start")],
+        [InlineKeyboardButton(text="📜 История",       callback_data="music_history")],
+        [InlineKeyboardButton(text="⬅️ В меню фокуса", callback_data="focus")],
     ])
 
 
-def kb_music_retry(query: str) -> InlineKeyboardMarkup:
-    # query обрезаем для callback_data (макс 64 байта)
-    safe_query = query[:40]
+def kb_retry(query: str) -> InlineKeyboardMarkup:
+    safe = query[:40]
     return InlineKeyboardMarkup(inline_keyboard=[
-        [InlineKeyboardButton(text="🔄 Попробовать снова", callback_data=f"music_retry_{safe_query}")],
-        [InlineKeyboardButton(text="🎵 Новый поиск",       callback_data="music")],
-        [InlineKeyboardButton(text="⬅️ В меню",            callback_data="focus")],
+        [InlineKeyboardButton(text="🔄 Попробовать снова", callback_data=f"music_retry_{safe}")],
+        [InlineKeyboardButton(text="🎵 Новый поиск",       callback_data="music_search_start")],
+        [InlineKeyboardButton(text="⬅️ В меню",            callback_data="music")],
     ])
+
+
+def kb_history(items: list) -> InlineKeyboardMarkup:
+    buttons = []
+    for item in items:
+        query = item.get("query", "")
+        label = f"🔁 {query}"[:55]
+        safe  = query[:40]
+        buttons.append([InlineKeyboardButton(text=label, callback_data=f"music_retry_{safe}")])
+    buttons.append([InlineKeyboardButton(text="🗑 Очистить историю", callback_data="music_clear_history")])
+    buttons.append([InlineKeyboardButton(text="⬅️ Назад",            callback_data="music")])
+    return InlineKeyboardMarkup(inline_keyboard=buttons)
 
 
 # =========================
-# 🎵 Вход в раздел музыки
+# 🎵 Главное меню
 # =========================
 @router.callback_query(F.data == "music")
 async def music_open(callback: CallbackQuery, state: FSMContext):
     await callback.answer()
-    await state.set_state(MusicStates.waiting_query)
+    await state.clear()
     try:
         await callback.message.edit_text(
             "🎵 <b>Музыка</b>\n\n"
-            "Введи название трека или исполнителя:\n\n"
-            "<i>Примеры:\n"
-            "• Imagine Dragons — Believer\n"
-            "• Скриптонит — Незабудка\n"
-            "• Coldplay Yellow</i>\n\n"
-            "Бот найдёт и отправит тебе аудиофайл 🎧",
-            reply_markup=kb_music_cancel(),
+            "Введи название трека или исполнителя — бот скачает и отправит аудиофайл 🎧\n\n"
+            "<i>Работает с большинством треков: поп, рок, рэп, классика и т.д.</i>",
+            reply_markup=kb_music_main(),
             parse_mode='HTML'
         )
     except TelegramBadRequest:
@@ -100,35 +126,328 @@ async def music_open(callback: CallbackQuery, state: FSMContext):
 
 
 # =========================
-# 🔍 Получение запроса
+# 🔍 Запуск поиска
+# =========================
+@router.callback_query(F.data == "music_search_start")
+async def music_search_start(callback: CallbackQuery, state: FSMContext):
+    await callback.answer()
+    await state.set_state(MusicStates.waiting_query)
+    try:
+        await callback.message.edit_text(
+            "🎵 <b>Поиск трека</b>\n\n"
+            "Введи название или исполнителя:\n\n"
+            "<i>Примеры:\n"
+            "• Imagine Dragons Believer\n"
+            "• Скриптонит незабудка\n"
+            "• MACAN Jet</i>",
+            reply_markup=kb_cancel(),
+            parse_mode='HTML'
+        )
+    except TelegramBadRequest:
+        pass
+
+
+# =========================
+# 📝 Получение запроса
 # =========================
 @router.message(MusicStates.waiting_query, F.text)
-async def music_search(message: Message, state: FSMContext, bot: Bot):
-    query = message.text.strip()
+async def music_got_query(message: Message, state: FSMContext, bot: Bot):
+    query   = message.text.strip()
+    user_id = message.from_user.id
+
     if not query:
         await message.answer("❌ Введи название трека:")
         return
 
+    # ── Антиспам ──
+    now  = time.time()
+    last = _last_request.get(user_id, 0)
+    wait = ANTISPAM_SECONDS - (now - last)
+    if wait > 0:
+        await message.answer(
+            f"⏳ Подожди ещё <b>{int(wait) + 1} сек.</b> перед следующим запросом.",
+            parse_mode='HTML'
+        )
+        return
+
+    _last_request[user_id] = now
     await state.clear()
-    await _download_and_send(message, query, bot)
+
+    status = await message.answer(
+        f"🔍 Ищу: <i>{query}</i>...",
+        parse_mode='HTML'
+    )
+    await _search_and_download(status, query, user_id, bot)
 
 
 # =========================
-# 🔄 Повтор из кнопки
+# 🔄 Повтор из истории / retry
 # =========================
 @router.callback_query(F.data.startswith("music_retry_"))
 async def music_retry(callback: CallbackQuery, state: FSMContext, bot: Bot):
     await callback.answer()
-    query = callback.data.replace("music_retry_", "").strip()
+    query   = callback.data.replace("music_retry_", "").strip()
+    user_id = callback.from_user.id
+
     if not query:
-        await music_open(callback, state)
+        await music_search_start(callback, state)
         return
-    # Отправляем новое сообщение со статусом
+
+    now  = time.time()
+    last = _last_request.get(user_id, 0)
+    wait = ANTISPAM_SECONDS - (now - last)
+    if wait > 0:
+        await callback.answer(f"⏳ Подожди ещё {int(wait) + 1} сек.", show_alert=True)
+        return
+
+    _last_request[user_id] = now
     status = await callback.message.answer(
-        f"🔍 <b>Ищу:</b> <i>{query}</i>...",
+        f"🔍 Ищу: <i>{query}</i>...",
         parse_mode='HTML'
     )
-    await _do_download(status, query, bot, callback.from_user.id)
+    await _search_and_download(status, query, user_id, bot)
+
+
+# =========================
+# 📥 Поиск + скачивание
+# =========================
+async def _search_and_download(status_msg, query: str, user_id: int, bot: Bot):
+    # ── Кэш по запросу ──
+    query_hash = hashlib.md5(query.lower().strip().encode()).hexdigest()
+    cached = await music_cache.find_one({"query_hash": query_hash})
+
+    if cached and cached.get("file_id"):
+        await _safe_edit(status_msg, "⚡ Нашёл в кэше, отправляю...")
+        try:
+            caption = _build_caption(
+                title    = cached["title"],
+                artist   = cached.get("artist", ""),
+                duration = cached.get("duration"),
+                bot_name = (await bot.get_me()).username,
+                cached   = True
+            )
+            await bot.send_audio(
+                chat_id   = user_id,
+                audio     = cached["file_id"],
+                caption   = caption,
+                parse_mode= 'HTML',
+                title     = cached["title"],
+                performer = cached.get("artist", ""),
+            )
+            await _safe_edit(status_msg, "✅ Готово!", kb_after_track())
+            await _give_xp(bot, user_id)
+            await _save_history(user_id, query, cached["title"])
+            return
+        except Exception:
+            # file_id устарел — удаляем и скачиваем заново
+            await music_cache.delete_one({"query_hash": query_hash})
+
+    # ── Скачиваем ──
+    await _safe_edit(status_msg, f"⬇️ <b>Скачиваю...</b>\n<i>{query}</i>")
+
+    try:
+        import yt_dlp  # noqa
+    except ImportError:
+        await _safe_edit(
+            status_msg,
+            "❌ <b>Модуль yt-dlp не установлен.</b>\n\n"
+            "Администратору нужно выполнить:\n"
+            "<code>pip install yt-dlp</code>\n"
+            "<code>apt-get install ffmpeg -y</code>"
+        )
+        return
+
+    with tempfile.TemporaryDirectory() as tmpdir:
+        ydl_opts = {
+            "format":      "bestaudio/best",
+            "outtmpl":     os.path.join(tmpdir, "%(title)s.%(ext)s"),
+            "quiet":       True,
+            "no_warnings": True,
+            "noplaylist":  True,
+            "max_filesize": MAX_FILE_MB * 1024 * 1024,
+            "default_search": "ytsearch1",
+            "postprocessors": [{
+                "key":              "FFmpegExtractAudio",
+                "preferredcodec":   "mp3",
+                "preferredquality": "192",
+            }],
+        }
+
+        try:
+            loop      = asyncio.get_event_loop()
+            file_info = await loop.run_in_executor(
+                None,
+                lambda: _yt_download_sync(query, ydl_opts, tmpdir)
+            )
+        except Exception as e:
+            await _safe_edit(
+                status_msg,
+                f"❌ <b>Ошибка при загрузке</b>\n\n<code>{str(e)[:150]}</code>",
+                kb_retry(query)
+            )
+            return
+
+        if not file_info or not file_info.get("filepath"):
+            await _safe_edit(
+                status_msg,
+                f"😔 <b>Не удалось найти трек</b>\n\n"
+                f"<i>{query}</i>\n\n"
+                "Попробуй уточнить запрос:\n"
+                "• добавь имя исполнителя\n"
+                "• проверь написание",
+                kb_retry(query)
+            )
+            return
+
+        filepath  = file_info["filepath"]
+        file_size = os.path.getsize(filepath)
+
+        if file_size > MAX_FILE_MB * 1024 * 1024:
+            await _safe_edit(
+                status_msg,
+                f"❌ <b>Файл слишком большой</b>\n\n"
+                f"Размер: {file_size // (1024*1024)} МБ  (лимит {MAX_FILE_MB} МБ)\n"
+                "Попробуй найти более короткую версию.",
+                kb_retry(query)
+            )
+            return
+
+        track_title  = file_info.get("title",  query)
+        track_artist = file_info.get("artist", "")
+        duration     = file_info.get("duration")
+
+        await _safe_edit(status_msg, "📤 Отправляю...")
+
+        bot_username = (await bot.get_me()).username
+        caption = _build_caption(
+            title    = track_title,
+            artist   = track_artist,
+            duration = duration,
+            bot_name = bot_username,
+        )
+
+        safe_name  = _safe_filename(track_title) + ".mp3"
+        audio_file = FSInputFile(filepath, filename=safe_name)
+
+        try:
+            sent = await bot.send_audio(
+                chat_id   = user_id,
+                audio     = audio_file,
+                caption   = caption,
+                parse_mode= 'HTML',
+                title     = track_title,
+                performer = track_artist,
+            )
+
+            # Сохраняем file_id в кэш по query_hash
+            fid = sent.audio.file_id if sent.audio else None
+            if fid:
+                await music_cache.update_one(
+                    {"query_hash": query_hash},
+                    {"$set": {
+                        "query_hash": query_hash,
+                        "file_id":    fid,
+                        "title":      track_title,
+                        "artist":     track_artist,
+                        "duration":   duration,
+                        "cached_at":  datetime.now().isoformat(),
+                    }},
+                    upsert=True
+                )
+
+            await _safe_edit(status_msg, "✅ <b>Готово!</b> 🎧", kb_after_track())
+            await _save_history(user_id, query, track_title)
+            await _give_xp(bot, user_id)
+
+        except Exception as e:
+            await _safe_edit(
+                status_msg,
+                f"❌ <b>Ошибка при отправке файла</b>\n\n<code>{str(e)[:100]}</code>",
+                kb_retry(query)
+            )
+
+
+# =========================
+# 🔧 Синхронная загрузка (для executor)
+# =========================
+def _yt_download_sync(query: str, opts: dict, tmpdir: str) -> dict | None:
+    import yt_dlp
+
+    result = {}
+    with yt_dlp.YoutubeDL(opts) as ydl:
+        info = ydl.extract_info(query, download=True)
+        if not info:
+            return None
+
+        # При ytsearch1 результат может быть в entries
+        entry = info
+        if "entries" in info and info["entries"]:
+            entry = info["entries"][0]
+
+        result["title"]    = entry.get("title", "")
+        result["artist"]   = (
+            entry.get("artist") or
+            entry.get("uploader") or
+            entry.get("channel") or
+            ""
+        )
+        result["duration"] = entry.get("duration")
+
+    # Ищем mp3 файл
+    for fname in os.listdir(tmpdir):
+        if fname.endswith(".mp3"):
+            result["filepath"] = os.path.join(tmpdir, fname)
+            return result
+
+    # Запасной вариант — любой аудиофайл
+    for fname in os.listdir(tmpdir):
+        if any(fname.endswith(ext) for ext in (".m4a", ".webm", ".ogg", ".opus")):
+            result["filepath"] = os.path.join(tmpdir, fname)
+            return result
+
+    return None
+
+
+# =========================
+# 📜 История поиска
+# =========================
+@router.callback_query(F.data == "music_history")
+async def music_show_history(callback: CallbackQuery):
+    await callback.answer()
+    history = await _get_history(callback.from_user.id)
+
+    if not history:
+        await _safe_edit(
+            callback.message,
+            "📜 <b>История поиска пуста</b>\n\n"
+            "Найди первый трек — и он появится здесь.",
+            InlineKeyboardMarkup(inline_keyboard=[
+                [InlineKeyboardButton(text="🎵 Найти трек", callback_data="music_search_start")],
+                [InlineKeyboardButton(text="⬅️ Назад",      callback_data="music")],
+            ])
+        )
+        return
+
+    await _safe_edit(
+        callback.message,
+        "📜 <b>История поиска</b>\n\n"
+        "Нажми на запрос, чтобы скачать снова:",
+        kb_history(history)
+    )
+
+
+@router.callback_query(F.data == "music_clear_history")
+async def music_clear_history(callback: CallbackQuery):
+    await callback.answer()
+    await music_history.delete_many({"user_id": callback.from_user.id})
+    await _safe_edit(
+        callback.message,
+        "🗑 <b>История очищена</b>",
+        InlineKeyboardMarkup(inline_keyboard=[
+            [InlineKeyboardButton(text="🎵 Найти трек", callback_data="music_search_start")],
+            [InlineKeyboardButton(text="⬅️ Назад",      callback_data="music")],
+        ])
+    )
 
 
 # =========================
@@ -138,209 +457,12 @@ async def music_retry(callback: CallbackQuery, state: FSMContext, bot: Bot):
 async def music_cancel(callback: CallbackQuery, state: FSMContext):
     await callback.answer()
     await state.clear()
-    try:
-        await callback.message.edit_text(
-            "🎯 <b>Фокус</b>\nВыбери что хочешь сделать:",
-            reply_markup=InlineKeyboardMarkup(inline_keyboard=[
-                [InlineKeyboardButton(text="🎧 Музыка",           callback_data="music")],
-                [InlineKeyboardButton(text="🍅 Таймер Помодоро",  callback_data="pomodoro_timer")],
-                [InlineKeyboardButton(text="✅ To-Do список",     callback_data="to_do_list")],
-                [InlineKeyboardButton(text="⬅️ Назад",            callback_data="back_to_main")],
-            ]),
-            parse_mode='HTML'
-        )
-    except TelegramBadRequest:
-        pass
-
-
-# =========================
-# 📥 Основная логика скачивания
-# =========================
-async def _download_and_send(message: Message, query: str, bot: Bot):
-    status = await message.answer(
-        f"🔍 <b>Ищу:</b> <i>{query}</i>...",
-        parse_mode='HTML'
+    await _safe_edit(
+        callback.message,
+        "🎵 <b>Музыка</b>\n\n"
+        "Введи название трека или исполнителя — бот скачает и отправит аудиофайл 🎧",
+        kb_music_main()
     )
-    await _do_download(status, query, bot, message.from_user.id)
-
-
-async def _do_download(status_msg, query: str, bot: Bot, user_id: int):
-    """
-    Пытается скачать трек через yt-dlp.
-    status_msg — сообщение для обновления статуса.
-    """
-    try:
-        import yt_dlp
-    except ImportError:
-        await status_msg.edit_text(
-            "❌ <b>Модуль yt-dlp не установлен.</b>\n\n"
-            "Администратору нужно выполнить:\n"
-            "<code>pip install yt-dlp</code>",
-            parse_mode='HTML'
-        )
-        return
-
-    with tempfile.TemporaryDirectory() as tmpdir:
-        output_template = os.path.join(tmpdir, "%(title)s.%(ext)s")
-
-        ydl_opts = {
-            "format": "bestaudio/best",
-            "outtmpl": output_template,
-            "quiet": True,
-            "no_warnings": True,
-            "noplaylist": True,
-            "max_filesize": MAX_FILE_MB * 1024 * 1024,
-            "postprocessors": [{
-                "key": "FFmpegExtractAudio",
-                "preferredcodec": "mp3",
-                "preferredquality": "192",
-            }],
-        }
-
-        # Пробуем источники по очереди
-        downloaded_file = None
-        track_title = None
-        track_duration = None
-        track_artist = None
-
-        for prefix, source_name in SEARCH_SOURCES:
-            search_query = f"{prefix}:{query}"
-            await _safe_edit(status_msg, f"🔍 Ищу <i>{query}</i> в {source_name}...")
-
-            try:
-                loop = asyncio.get_event_loop()
-                info = await loop.run_in_executor(
-                    None,
-                    lambda sq=search_query: _yt_extract(sq, ydl_opts, tmpdir)
-                )
-
-                if info and info.get("filepath"):
-                    downloaded_file = info["filepath"]
-                    track_title    = info.get("title", query)
-                    track_duration = info.get("duration")
-                    track_artist   = info.get("uploader") or info.get("artist", "")
-                    break
-
-            except Exception as e:
-                print(f"[MUSIC] {source_name} failed for '{query}': {e}")
-                continue
-
-        if not downloaded_file or not os.path.exists(downloaded_file):
-            await status_msg.edit_text(
-                f"😔 <b>Трек не найден</b>\n\n"
-                f"Не удалось найти: <i>{query}</i>\n\n"
-                f"Попробуй:\n"
-                f"• Уточнить запрос (исполнитель — название)\n"
-                f"• Проверить написание",
-                reply_markup=kb_music_retry(query),
-                parse_mode='HTML'
-            )
-            return
-
-        # Проверяем размер
-        file_size = os.path.getsize(downloaded_file)
-        if file_size > MAX_FILE_MB * 1024 * 1024:
-            await status_msg.edit_text(
-                f"❌ <b>Файл слишком большой</b>\n\n"
-                f"Размер: {file_size // (1024*1024)} МБ (лимит {MAX_FILE_MB} МБ)\n\n"
-                f"Попробуй найти более короткую версию трека.",
-                reply_markup=kb_music_retry(query),
-                parse_mode='HTML'
-            )
-            return
-
-        await _safe_edit(status_msg, "📤 Отправляю...")
-
-        # Формируем подпись
-        duration_str = _fmt_duration(track_duration) if track_duration else ""
-        caption = f"🎵 <b>{track_title}</b>"
-        if track_artist:
-            caption += f"\n👤 {track_artist}"
-        if duration_str:
-            caption += f"\n⏱ {duration_str}"
-        caption += f"\n\n📥 <i>Скачано для @{(await bot.get_me()).username}</i>"
-
-        try:
-            audio_file = FSInputFile(downloaded_file, filename=f"{_safe_filename(track_title)}.mp3")
-            await bot.send_audio(
-                chat_id=user_id,
-                audio=audio_file,
-                caption=caption,
-                parse_mode='HTML',
-                title=track_title,
-                performer=track_artist or "",
-            )
-            await status_msg.edit_text(
-                f"✅ <b>Готово!</b> Трек отправлен 🎧",
-                reply_markup=kb_music_back()
-            )
-
-            # Начисляем XP
-            try:
-                from services.xp import give_xp
-                await give_xp(bot, user_id, "music_downloaded")
-            except Exception:
-                pass
-
-        except Exception as e:
-            print(f"[MUSIC] Send error: {e}")
-            await status_msg.edit_text(
-                "❌ <b>Ошибка при отправке файла.</b>\n\nПопробуй другой трек.",
-                reply_markup=kb_music_retry(query),
-                parse_mode='HTML'
-            )
-
-
-def _yt_extract(search_query: str, ydl_opts: dict, tmpdir: str) -> dict | None:
-    """Синхронная функция для run_in_executor."""
-    import yt_dlp
-
-    result = {}
-    opts = {**ydl_opts}
-
-    # Хук для получения имени файла после скачивания
-    downloaded_files = []
-
-    def progress_hook(d):
-        if d["status"] == "finished":
-            downloaded_files.append(d["filename"])
-
-    opts["progress_hooks"] = [progress_hook]
-
-    with yt_dlp.YoutubeDL(opts) as ydl:
-        info = ydl.extract_info(search_query, download=True)
-
-        if not info:
-            return None
-
-        # Берём первый результат из поиска
-        if "entries" in info:
-            entry = info["entries"][0] if info["entries"] else None
-        else:
-            entry = info
-
-        if not entry:
-            return None
-
-        result["title"]    = entry.get("title", "")
-        result["duration"] = entry.get("duration")
-        result["uploader"] = entry.get("uploader") or entry.get("channel", "")
-        result["artist"]   = entry.get("artist", "")
-
-        # Ищем mp3 файл в tmpdir
-        for fname in os.listdir(tmpdir):
-            if fname.endswith(".mp3"):
-                result["filepath"] = os.path.join(tmpdir, fname)
-                break
-
-        # Если mp3 не нашли — берём первый попавшийся аудиофайл
-        if not result.get("filepath"):
-            for fname in os.listdir(tmpdir):
-                if any(fname.endswith(ext) for ext in (".webm", ".m4a", ".ogg", ".opus")):
-                    result["filepath"] = os.path.join(tmpdir, fname)
-                    break
-
-    return result if result.get("filepath") else None
 
 
 # =========================
@@ -356,14 +478,84 @@ def _fmt_duration(seconds) -> str:
 
 
 def _safe_filename(title: str) -> str:
-    """Убирает спецсимволы из имени файла."""
     if not title:
         return "track"
     return re.sub(r'[\\/*?:"<>|]', "", title)[:80]
+
+
+def _build_caption(
+    title:    str,
+    artist:   str,
+    duration,
+    bot_name: str = "",
+    cached:   bool = False
+) -> str:
+    lines = []
+
+    # Разделитель сверху
+    lines.append("🎵 <b>───── Трек ─────</b>")
+    lines.append("")
+
+    lines.append(f"🎼 <b>{title}</b>")
+
+    if artist:
+        lines.append(f"👤 {artist}")
+
+    dur = _fmt_duration(duration)
+    if dur:
+        lines.append(f"⏱ {dur}")
+
+    if cached:
+        lines.append("⚡ <i>из кэша</i>")
+
+    lines.append("")
+    lines.append("─────────────────")
+
+    if bot_name:
+        lines.append(f"📥 <i>Скачано через @{bot_name}</i>")
+
+    return "\n".join(lines)
 
 
 async def _safe_edit(msg, text: str, markup=None):
     try:
         await msg.edit_text(text, reply_markup=markup, parse_mode='HTML')
     except TelegramBadRequest:
+        pass
+
+
+async def _save_history(user_id: int, query: str, title: str):
+    """Добавляет запрос в историю, ограничивает HISTORY_LIMIT."""
+    await music_history.insert_one({
+        "user_id": user_id,
+        "query":   query,
+        "title":   title,
+        "ts":      datetime.now().isoformat(),
+    })
+    # Удаляем старые записи сверх лимита
+    all_docs = await music_history.find(
+        {"user_id": user_id}
+    ).sort("ts", -1).skip(HISTORY_LIMIT).to_list(length=100)
+    if all_docs:
+        await music_history.delete_many({"_id": {"$in": [d["_id"] for d in all_docs]}})
+
+
+async def _get_history(user_id: int) -> list:
+    cursor = music_history.find({"user_id": user_id}).sort("ts", -1).limit(HISTORY_LIMIT * 2)
+    result, seen = [], set()
+    async for doc in cursor:
+        q = doc.get("query", "")
+        if q not in seen:
+            seen.add(q)
+            result.append(doc)
+        if len(result) >= HISTORY_LIMIT:
+            break
+    return result
+
+
+async def _give_xp(bot: Bot, user_id: int):
+    try:
+        from services.xp import give_xp
+        await give_xp(bot, user_id, "music_downloaded")
+    except Exception:
         pass

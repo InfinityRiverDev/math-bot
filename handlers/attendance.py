@@ -15,6 +15,7 @@ from aiogram.types import Message
 
 from database.models import get_all_users, get_user_profile
 from handlers.registration import check_knrtu_auth
+from database.stats_models import log_activity
 from handlers.admin import ADMIN_IDS
 
 router = Router()
@@ -142,6 +143,7 @@ async def _process_one_user(
 
     if success:
         success_users.append({"user_id": user_id, "login": login})
+        log_activity()
         try:
             await bot.send_message(
                 user_id,

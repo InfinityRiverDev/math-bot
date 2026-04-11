@@ -88,10 +88,10 @@ lectures = InlineKeyboardMarkup(inline_keyboard=[
 # 🎯 Фокус
 # =========================
 focus = InlineKeyboardMarkup(inline_keyboard=[
-    [InlineKeyboardButton(text="🎧 Музыка",              callback_data="music")],
-    [InlineKeyboardButton(text="🍅 Таймер Помодоро",     callback_data="pomodoro_timer")],
-    [InlineKeyboardButton(text="✅ To-Do список дел",    callback_data="to_do_list")],
-    [InlineKeyboardButton(text="⬅️ Назад",               callback_data="back_to_main")]
+    [InlineKeyboardButton(text="✅ To-Do список дел", callback_data="to_do_list")],
+    [InlineKeyboardButton(text="🍅 Таймер Помодоро", callback_data="pomodoro_timer")],
+    [InlineKeyboardButton(text="🎧 Музыка", callback_data="music")],
+    [InlineKeyboardButton(text="⬅️ Назад", callback_data="back_to_main")]
 ])
 
 

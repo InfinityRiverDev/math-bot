@@ -22,7 +22,7 @@ from aiogram.types import (
     InlineKeyboardMarkup, InlineKeyboardButton
 )
 from aiogram.exceptions import TelegramBadRequest
-
+from database.stats_models import log_activity
 from database.todo_models import (
     get_todos, add_todo, toggle_todo, cycle_priority,
     edit_todo_text, delete_todo, clear_done, get_stats, get_todo
@@ -640,6 +640,7 @@ async def todo_add_priority(callback: CallbackQuery, state: FSMContext):
         priority=priority,
         deadline=deadline
     )
+    log_activity()
     await give_xp(callback.bot, callback.from_user.id, "todo_added")
     await state.clear()
 
