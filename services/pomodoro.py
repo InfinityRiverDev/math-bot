@@ -295,7 +295,7 @@ async def _on_work_done(callback: CallbackQuery, state: FSMContext):
     if cycles_done % 5 == 0:
         await give_xp(callback.bot, callback.from_user.id, "pomodoro_5cycles")
 
-    log_activity()
+    await log_activity(callback.from_user.id, "pomodoro")
 
 
 # =========================

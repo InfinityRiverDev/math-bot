@@ -34,7 +34,9 @@ from aiogram.exceptions import TelegramBadRequest
 from database.stats_models import log_activity
 from database.mongo import db
 
+
 router = Router()
+
 
 # =========================
 # 🗄 Коллекции MongoDB
@@ -557,5 +559,6 @@ async def _give_xp(bot: Bot, user_id: int):
     try:
         from services.xp import give_xp
         await give_xp(bot, user_id, "music_downloaded")
+        await log_activity(user_id, "music")
     except Exception:
         pass

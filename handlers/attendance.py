@@ -143,7 +143,9 @@ async def _process_one_user(
 
     if success:
         success_users.append({"user_id": user_id, "login": login})
-        log_activity()
+
+        await log_activity(user_id, "attendance")
+
         try:
             await bot.send_message(
                 user_id,

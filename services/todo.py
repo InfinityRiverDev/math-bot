@@ -640,7 +640,9 @@ async def todo_add_priority(callback: CallbackQuery, state: FSMContext):
         priority=priority,
         deadline=deadline
     )
-    log_activity()
+
+    await log_activity(callback.from_user.id, "todo")
+
     await give_xp(callback.bot, callback.from_user.id, "todo_added")
     await state.clear()
 

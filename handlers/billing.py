@@ -427,7 +427,7 @@ async def confirm_plan_purchase(callback: CallbackQuery, state: FSMContext):
     discount = promo["discount_percent"] if promo else 0
     final_price = round(plan["price"] * (1 - discount / 100), 2)
 
-    # Списываем с баланса
+    # 💳 Списываем деньги
     ok = await deduct_balance(user_id, final_price)
     if not ok:
         balance = await get_balance(user_id)
@@ -441,11 +441,11 @@ async def confirm_plan_purchase(callback: CallbackQuery, state: FSMContext):
         )
         return
 
-    # Активируем промокод
+    # 🎟 Промокод
     if promo:
         await use_promo(promo["code"])
 
-    # Активируем подписку
+    # 🚀 Активируем подписку
     await activate_subscription(
         user_id=user_id,
         plan_id=plan_id,
@@ -458,16 +458,25 @@ async def confirm_plan_purchase(callback: CallbackQuery, state: FSMContext):
 
     await state.clear()
 
-    await callback.bot.send_sticker(
-        chat_id=callback.from_user.id,
-        sticker="CAACAgIAAxkBAAFG27xp2C7FjIk6uG_MOmxn5cgact0LQAACyIoAAp5fyEq-BgUKu_4q-TsE"
+    # 🔥 КАРТИНКА (главное)
+    from aiogram.types import FSInputFile
+    photo = FSInputFile("media/notifications/notification_buy_subscription.png")
+
+    await callback.bot.send_photo(
+        chat_id=user_id,
+        photo=photo,
+        caption=(
+            f"🎉 <b>Тариф «{plan['name']}» активирован!</b>\n\n"
+            f"💳 Списано: <b>{final_price}₽</b>\n"
+            f"📅 Действует до: <b>{expires.strftime('%d.%m.%Y')}</b>\n\n"
+            f"Теперь вам доступны все функции бота!"
+        ),
+        parse_mode='HTML'
     )
 
+    # 📲 Обновляем интерфейс (оставляем)
     await callback.message.edit_text(
-        f"🎉 <b>Тариф «{plan['name']}» активирован!</b>\n\n"
-        f"✅ Списано: <b>{final_price}₽</b>\n"
-        f"📅 Действует до: <b>{expires.strftime('%d.%m.%Y')}</b>\n\n"
-        f"Теперь вам доступны все функции бота!",
+        "✅ <b>Тариф успешно активирован!</b>",
         reply_markup=InlineKeyboardMarkup(inline_keyboard=[
             [InlineKeyboardButton(text="💼 Мой кошелёк", callback_data="wallet_view")],
             [InlineKeyboardButton(text="🏠 Главное меню", callback_data="back_to_main")],

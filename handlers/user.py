@@ -553,7 +553,8 @@ async def tutor_handle_text(message: Message, state: FSMContext, bot: Bot):
         history.append({"role": "user", "content": message.text})
         history.append({"role": "assistant", "content": final_text})
         await update_history(message.from_user.id, history[-10:])
-        log_activity()
+
+        await log_activity(message.from_user.id, "tutor")
 
         await give_xp(bot, message.from_user.id, "tutor_message")
 
@@ -841,7 +842,8 @@ async def practice_handle_text(message: Message, state: FSMContext, bot: Bot):
 
     task = asyncio.create_task(stream_response())
     await state.update_data(current_task=task)
-    log_activity()
+
+    await log_activity(message.from_user.id, "practice")
 
     await give_xp(bot, message.from_user.id, "practice_request")
 

@@ -15,7 +15,9 @@ handlers/stats.py
 import io
 import os
 import tempfile
+import html
 from datetime import datetime
+from tkinter import Image
 
 from aiogram import F, Router, Bot
 from aiogram.types import (
@@ -29,7 +31,8 @@ from handlers.admin import ADMIN_IDS
 from database.stats_models import (
     stats_users, stats_finance, stats_activity,
     stats_top_xp, stats_registrations_chart, get_full_stats,
-)
+    )
+
 
 router = Router()
 
@@ -70,13 +73,24 @@ def kb_stats_main() -> InlineKeyboardMarkup:
             InlineKeyboardButton(text="📈 Динамика", callback_data="stats_chart"),
         ],
         [
-            InlineKeyboardButton(text="📥 Экспорт Excel", callback_data="stats_export"),
+            InlineKeyboardButton(text="📥 Экспорт", callback_data="stats_export_choose"),
         ],
         [
             InlineKeyboardButton(text="⬅️ Назад", callback_data="admin_main"),
         ],
     ])
 
+
+def kb_export_choice() -> InlineKeyboardMarkup:
+    return InlineKeyboardMarkup(inline_keyboard=[
+        [
+            InlineKeyboardButton(text="📊 Excel", callback_data="stats_export_excel"),
+            InlineKeyboardButton(text="📄 PDF", callback_data="stats_export_pdf"),
+        ],
+        [
+            InlineKeyboardButton(text="⬅️ Назад", callback_data="admin_statistics"),
+        ],
+    ])
 
 def kb_back() -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(inline_keyboard=[
@@ -284,7 +298,7 @@ async def stats_show_chart(callback: CallbackQuery):
     if not any(d["count"] for d in chart):
         await safe_edit(
             callback.message,
-            "📈 <b>Динамика регистраций (30 дней)</b>\n\nДанных пока нет.",
+            "<b>Динамика регистраций (30 дней)</b>\n\nДанных пока нет.",
             kb_back()
         )
         return
@@ -323,7 +337,17 @@ async def stats_show_chart(callback: CallbackQuery):
 # =========================
 # 📥 Экспорт в Excel
 # =========================
-@router.callback_query(F.data == "stats_export", F.from_user.id.in_(ADMIN_IDS))
+@router.callback_query(F.data == "stats_export_choose", F.from_user.id.in_(ADMIN_IDS))
+async def stats_export_choose(callback: CallbackQuery):
+    await callback.answer()
+    await safe_edit(
+        callback.message,
+        "📥 <b>Выбери формат экспорта:</b>",
+        kb_export_choice()
+    )
+
+
+@router.callback_query(F.data == "stats_export_excel", F.from_user.id.in_(ADMIN_IDS))
 async def stats_export(callback: CallbackQuery, bot: Bot):
     await callback.answer()
     await safe_edit(callback.message, "📊 Собираю данные и формирую Excel...")
@@ -349,9 +373,10 @@ async def stats_export(callback: CallbackQuery, bot: Bot):
             kb_stats_main()
         )
     except Exception as e:
+        err = html.escape(str(e))[:200]
         await safe_edit(
             callback.message,
-            f"❌ <b>Ошибка при формировании файла</b>\n\n<code>{str(e)[:200]}</code>",
+            f"❌ <b>Ошибка при формировании файла</b>\n\n<code>{err}</code>",
             kb_stats_main()
         )
 
@@ -365,6 +390,7 @@ async def _build_xlsx(data: dict) -> io.BytesIO:
         Font, PatternFill, Alignment, Border, Side
     )
     from openpyxl.utils import get_column_letter
+    from openpyxl.chart import BarChart, Reference, LineChart
 
     wb = Workbook()
     now = data["generated_at"]
@@ -479,7 +505,7 @@ async def _build_xlsx(data: dict) -> io.BytesIO:
     # Продажи по тарифам
     row = len(rows_f) + 6
     ws2.merge_cells(start_row=row, start_column=1, end_row=row, end_column=4)
-    header_cell(ws2, row, 1, "Продажи по тарифам", bg=C_SUBHEAD, cols=4)
+    header_cell(ws2, row, 1, "Продажи по тарифам", bg=C_SUBHEAD)
     row += 1
     header_cell(ws2, row, 1, "Тариф", bg=C_SUBHEAD)
     header_cell(ws2, row, 2, "Покупок", bg=C_SUBHEAD)
@@ -511,6 +537,28 @@ async def _build_xlsx(data: dict) -> io.BytesIO:
         data_cell(ws2, row, 3, p["uses"], bg=bg, align="center", bold=True)
         data_cell(ws2, row, 4, "Да" if p["active"] else "Нет", bg=bg, align="center")
         row += 1
+
+    # 📊 KPI рост выручки (сегодня vs среднее)
+    avg = f["month_revenue"] / 30 if f["month_revenue"] else 0
+    delta = f["today_revenue"] - avg
+
+    # безопасно определяем строку
+    last_row = ws2.max_row + 2
+
+    data_cell(ws2, last_row, 1, "Отклонение от среднего", bold=True)
+
+    cell = ws2.cell(row=last_row, column=2, value=delta)
+    cell.font = Font(bold=True)
+
+    if delta > 0:
+        cell.fill = PatternFill("solid", start_color=C_GREEN)
+    elif delta < 0:
+        cell.fill = PatternFill("solid", start_color=C_RED)
+    else:
+        cell.fill = PatternFill("solid", start_color=C_YELLOW)
+
+    cell.alignment = Alignment(horizontal="center")
+    cell.border = thin
 
     set_col_widths(ws2, [28, 16, 14, 20])
 
@@ -571,6 +619,24 @@ async def _build_xlsx(data: dict) -> io.BytesIO:
 
     set_col_widths(ws4, [6, 22, 14, 12, 12, 40])
 
+    # 🏆 График XP
+    if data["top_xp"]:
+        chart = BarChart()
+        chart.title = "Топ XP за месяц"
+        chart.y_axis.title = "XP"
+        chart.x_axis.title = "Пользователи"
+
+        data_ref = Reference(ws4, min_col=4, min_row=4, max_row=4 + len(data["top_xp"]))
+        cats_ref = Reference(ws4, min_col=2, min_row=5, max_row=4 + len(data["top_xp"]))
+
+        chart.add_data(data_ref, titles_from_data=True)
+        chart.set_categories(cats_ref)
+
+        chart.height = 12
+        chart.width = 22
+
+        ws4.add_chart(chart, "H4")
+
     # ──────────────────────────────
     # Лист 5: Динамика регистраций
     # ──────────────────────────────
@@ -587,6 +653,27 @@ async def _build_xlsx(data: dict) -> io.BytesIO:
 
     # Итог
     total_row = len(data["reg_chart"]) + 5
+
+    # 📊 KPI тренд (последние 7 дней vs предыдущие)
+    last7 = sum(x["count"] for x in data["reg_chart"][-7:])
+    prev7 = sum(x["count"] for x in data["reg_chart"][-14:-7])
+
+    trend_cell = ws5.cell(row=total_row + 1, column=1, value="Тренд (7 дней)")
+    trend_value = last7 - prev7
+
+    cell = ws5.cell(row=total_row + 1, column=2, value=trend_value)
+    cell.font = Font(bold=True)
+
+    if trend_value > 0:
+        cell.fill = PatternFill("solid", start_color=C_GREEN)
+    elif trend_value < 0:
+        cell.fill = PatternFill("solid", start_color=C_RED)
+    else:
+        cell.fill = PatternFill("solid", start_color=C_YELLOW)
+
+    cell.alignment = Alignment(horizontal="center")
+    cell.border = thin
+
     data_cell(ws5, total_row, 1, "ИТОГО за 30 дней", bold=True, bg=C_YELLOW)
     ws5.cell(row=total_row, column=2).value = f'=SUM(B5:B{total_row - 1})'
     ws5.cell(row=total_row, column=2).font = Font(bold=True, name="Arial", size=10)
@@ -595,6 +682,23 @@ async def _build_xlsx(data: dict) -> io.BytesIO:
     ws5.cell(row=total_row, column=2).border = thin
 
     set_col_widths(ws5, [14, 10])
+
+    # 📈 График регистраций
+    chart = LineChart()
+    chart.title = "Регистрации по дням"
+    chart.y_axis.title = "Пользователи"
+    chart.x_axis.title = "Дата"
+
+    data_ref = Reference(ws5, min_col=2, min_row=4, max_row=total_row - 1)
+    cats_ref = Reference(ws5, min_col=1, min_row=5, max_row=total_row - 1)
+
+    chart.add_data(data_ref, titles_from_data=True)
+    chart.set_categories(cats_ref)
+
+    chart.height = 10
+    chart.width = 22
+
+    ws5.add_chart(chart, f"D4")
 
     # ──────────────────────────────
     # Сохраняем
@@ -613,3 +717,213 @@ def _bar(value: float, maximum: float, length: int = 8) -> str:
         return "⬜" * length
     filled = min(int(length * value / maximum), length)
     return "🟦" * filled + "⬜" * (length - filled)
+
+
+
+# =========================
+# 📥 Экспорт в PDF
+# =========================
+def _generate_insights(data: dict) -> list[str]:
+    insights = []
+
+    u = data["users"]
+    f = data["finance"]
+
+    # ===== 📊 Конверсия =====
+    if u["total"]:
+        conv = u["with_sub"] / u["total"] * 100
+        insights.append(f"Конверсия: {conv:.1f}%")
+
+    # ===== 💰 Выручка =====
+    avg = f["month_revenue"] / 30 if f["month_revenue"] else 0
+    today = f["today_revenue"]
+
+    if avg > 0:
+        delta_pct = (today - avg) / avg * 100
+
+        if delta_pct > 0:
+            insights.append(f"📈 Выручка выросла на {delta_pct:.1f}%")
+        else:
+            insights.append(f"📉 Выручка упала на {abs(delta_pct):.1f}%")
+
+    # ===== 📈 Регистрации =====
+    last7 = sum(x["count"] for x in data["reg_chart"][-7:])
+    prev7 = sum(x["count"] for x in data["reg_chart"][-14:-7])
+
+    if prev7 > 0:
+        delta = (last7 - prev7) / prev7 * 100
+        if delta > 0:
+            insights.append(f"📈 Регистрации выросли на {delta:.1f}%")
+        else:
+            insights.append(f"📉 Регистрации упали на {abs(delta):.1f}%")
+
+    # ===== 🏆 Аномалии =====
+    if data["top_xp"]:
+        top = data["top_xp"][0]
+        if top["xp_month"] > 5000:
+            insights.append(f"⚠️ Аномально высокий XP у {top['name']}")
+
+    return insights
+
+
+async def _build_pdf(data: dict) -> io.BytesIO:
+    from reportlab.pdfbase import pdfmetrics
+    from reportlab.pdfbase.ttfonts import TTFont
+
+    pdfmetrics.registerFont(TTFont("DejaVu", "media/fonts/DejaVuSans.ttf"))
+
+    import io
+    from reportlab.platypus import (
+        SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle
+    )
+    from reportlab.lib import colors
+    from reportlab.lib.styles import getSampleStyleSheet
+
+    buf = io.BytesIO()
+    doc = SimpleDocTemplate(buf)
+
+    styles = getSampleStyleSheet()
+    styles["Normal"].fontName = "DejaVu"
+    styles["Heading1"].fontName = "DejaVu"
+    styles["Heading2"].fontName = "DejaVu"
+    elements = []
+
+    # ===== Заголовок =====
+    elements.append(Paragraph("Статистика бота", styles["Title"]))
+    elements.append(Spacer(1, 10))
+    elements.append(Paragraph(f"Сформировано: {data['generated_at']}", styles["Normal"]))
+    elements.append(Spacer(1, 20))
+
+    # ===== 🧠 Авто-анализ =====
+    insights = _generate_insights(data)
+
+    elements.append(Paragraph("Авто-анализ", styles["Heading2"]))
+    for ins in insights:
+        elements.append(Paragraph(ins, styles["Normal"]))
+    elements.append(Spacer(1, 20))
+
+    # ===== 👥 Пользователи =====
+    u = data["users"]
+
+    elements.append(Paragraph("Пользователи", styles["Heading2"]))
+
+    table = Table([
+        ["Метрика", "Значение"],
+        ["Всего", u["total"]],
+        ["С подпиской", u["with_sub"]],
+        ["Без подписки", u["no_sub"]],
+        ["Сегодня", u["new_today"]],
+        ["Неделя", u["new_week"]],
+        ["Месяц", u["new_month"]],
+    ])
+
+    table.setStyle(TableStyle([
+        ("FONTNAME", (0, 0), (-1, -1), "DejaVu"),
+        ("GRID", (0, 0), (-1, -1), 1, colors.black),
+        ("BACKGROUND", (0, 0), (-1, 0), colors.grey),
+    ]))
+
+    elements.append(table)
+    elements.append(Spacer(1, 20))
+
+    # ===== 💰 Финансы =====
+    f = data["finance"]
+
+    elements.append(Paragraph("Финансы", styles["Heading2"]))
+
+    table = Table([
+        ["Метрика", "Значение"],
+        ["Сегодня", f["today_revenue"]],
+        ["Месяц", f["month_revenue"]],
+        ["Всего", f["total_revenue"]],
+        ["Платежи", f["payment_count"]],
+        ["Активные подписки", f["active_subs"]],
+    ])
+
+    table.setStyle(TableStyle([
+        ("FONTNAME", (0, 0), (-1, -1), "DejaVu"),
+        ("GRID", (0, 0), (-1, -1), 1, colors.black),
+        ("BACKGROUND", (0, 0), (-1, 0), colors.grey),
+    ]))
+
+    elements.append(table)
+    elements.append(Spacer(1, 20))
+
+    # ===== 📊 Активность =====
+    elements.append(Paragraph("Активность", styles["Heading2"]))
+
+    activity_data = [["Раздел", "Сегодня", "Месяц", "Всего"]]
+
+    for item in data["activity"].values():
+        activity_data.append([
+            item["label"],
+            item["today"],
+            item["month"],
+            item["total"]
+        ])
+
+    table = Table(activity_data)
+
+    table.setStyle(TableStyle([
+        ("FONTNAME", (0, 0), (-1, -1), "DejaVu"),
+        ("GRID", (0, 0), (-1, -1), 1, colors.black),
+        ("BACKGROUND", (0, 0), (-1, 0), colors.grey),
+    ]))
+
+    elements.append(table)
+    elements.append(Spacer(1, 20))
+
+    # ===== 📈 Динамика =====
+    elements.append(Paragraph("Динамика регистраций", styles["Heading2"]))
+
+    chart_data = [["Дата", "Новые"]]
+
+    for d in data["reg_chart"]:
+        chart_data.append([d["date"], d["count"]])
+
+    table = Table(chart_data)
+
+    table.setStyle(TableStyle([
+        ("FONTNAME", (0, 0), (-1, -1), "DejaVu"),
+        ("GRID", (0, 0), (-1, -1), 1, colors.black),
+        ("BACKGROUND", (0, 0), (-1, 0), colors.grey),
+    ]))
+
+    elements.append(table)
+
+    # ===== Сборка =====
+    doc.build(elements)
+    buf.seek(0)
+    return buf
+
+@router.callback_query(F.data == "stats_export_pdf", F.from_user.id.in_(ADMIN_IDS))
+async def stats_export_pdf(callback: CallbackQuery, bot: Bot):
+    await callback.answer()
+    await safe_edit(callback.message, "📄 Формирую PDF...")
+
+    try:
+        data = await get_full_stats()
+        pdf_buf = await _build_pdf(data)
+
+        fname = f"stats_{datetime.now().strftime('%Y%m%d_%H%M')}.pdf"
+
+        await bot.send_document(
+            chat_id=callback.from_user.id,
+            document=BufferedInputFile(pdf_buf.getvalue(), filename=fname),
+            caption="📄 PDF готов",
+        )
+
+        await safe_edit(
+            callback.message,
+            "✅ PDF отправлен!",
+            kb_stats_main()
+        )
+
+    except Exception as e:
+        import html
+        err = html.escape(str(e))[:200]
+        await safe_edit(
+            callback.message,
+            f"❌ <b>Ошибка PDF</b>\n\n<code>{err}</code>",
+            kb_stats_main()
+        )

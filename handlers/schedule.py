@@ -330,7 +330,8 @@ async def cmd_schedule(callback: CallbackQuery, state: FSMContext):
     nav_kb = get_nav_kb(today)
 
     await loading_msg.edit_text(text, reply_markup=nav_kb, parse_mode='HTML')
-    log_activity()
+
+    await log_activity(callback.from_user.id, "schedule")
 
 
 # =========================

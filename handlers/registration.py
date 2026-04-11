@@ -368,6 +368,7 @@ async def reg_confirm(callback: CallbackQuery, state: FSMContext):
     raw_password = data.get('knrtu_password', '')
     hashed_password = hash_password(raw_password)
 
+    # 💾 Регистрация пользователя
     await register_user_full(
         user_id=user_id,
         username=username,
@@ -375,22 +376,38 @@ async def reg_confirm(callback: CallbackQuery, state: FSMContext):
         last_name=data.get('last_name'),
         institute=data.get('institute'),
         group=data.get('group'),
-        group_id=data.get('group_id'),           # ⬅️ новое
+        group_id=data.get('group_id'),
         knrtu_login=data.get('knrtu_login'),
         knrtu_password=hashed_password,
-        knrtu_password_raw=raw_password,         # ⬅️ новое (открытый пароль для токена)
+        knrtu_password_raw=raw_password,
     )
 
     await state.clear()
     is_admin = user_id in ADMIN_IDS
- 
-    await callback.message.edit_text(
-        "🎉 <b>Регистрация успешно завершена!</b>\n\n"
-        f"Добро пожаловать, <b>{data.get('first_name')} {data.get('last_name')}</b>!\n\n"
-        "Теперь вы можете пользоваться ботом.",
+
+    # 🔥 КАРТИНКА РЕГИСТРАЦИИ
+    from aiogram.types import FSInputFile
+
+    photo = FSInputFile("media/notifications/notification_registration_successful.png")
+
+    await callback.bot.send_photo(
+        chat_id=user_id,
+        photo=photo,
+        caption=(
+            "🎉 <b>Регистрация успешно завершена!</b>\n\n"
+            f"Добро пожаловать, <b>{data.get('first_name')} {data.get('last_name')}</b>!\n\n"
+            "Теперь вы можете пользоваться ботом."
+        ),
         parse_mode='HTML'
     )
- 
+
+    # 📲 Обновляем старое сообщение (чтобы не висела старая форма)
+    await callback.message.edit_text(
+        "✅ <b>Регистрация завершена!</b>",
+        parse_mode='HTML'
+    )
+
+    # 🔒 Сообщение про подписку (оставляем)
     await callback.message.answer(
         '🔒 <b>Для полного доступа нужна подписка.</b>\n\n'
         'Сейчас тебе доступны только:\n'

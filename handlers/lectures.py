@@ -166,7 +166,9 @@ async def user_get_lecture(callback: CallbackQuery, bot: Bot):
             caption=f"📄 <b>{title}</b>",
             parse_mode='HTML'
         )
-        log_activity()
+
+        await log_activity(callback.from_user.id, "lecture")
+
         await callback.answer("✅ Лекция отправлена!")
     except Exception as e:
         await callback.answer(f"❌ Ошибка: {str(e)}", show_alert=True)
