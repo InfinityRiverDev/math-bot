@@ -1,13 +1,9 @@
 """
 middlewares/subscription_check.py
 
-Middleware — проверяет активную подписку у пользователя.
-Если подписки нет — ограничивает доступ к функциям, 
-оставляя доступными только «Личное» и «Услуги».
-
-Подключение в main.py:
-    from middlewares.subscription_check import SubscriptionMiddleware
-    dp.update.middleware(SubscriptionMiddleware())
+Middleware — проверяет активную подписку.
+Без подписки доступны ТОЛЬКО: Услуги, Кошелёк, Профиль, Регистрация.
+Администраторы из ADMIN_IDS — всегда без ограничений.
 """
 
 from typing import Callable, Dict, Any, Awaitable
@@ -19,21 +15,34 @@ from database.billing_models import has_active_subscription
 from database.models import is_registered
 from handlers.admin import ADMIN_IDS
 
+
 # Callback-данные, разрешённые без подписки
 ALLOWED_CALLBACKS = {
     # Навигация
-    "back_to_main", "personal", "profile", "user_data",
-    "backward_to_profile", "profile_view", "profile_delete",
+    "back_to_main",
+    "personal",
+    "profile",
+    "user_data",
+    "backward_to_profile",
+    "profile_view",
+    "profile_delete",
     "profile_delete_confirm",
-    # Услуги
-    "services", "backward_to_services", "print",
-    "paid_works", "backward_to_paid_works",
-    "presentation", "backward_to_presentation",
+    # Услуги (доступны всем)
+    "services",
+    "backward_to_services",
+    "print",
+    "paid_works",
+    "backward_to_paid_works",
+    "presentation",
+    "backward_to_presentation",
     "pr_1", "pr_2", "pr_3", "pr_4", "pr_5",
     # Кошелёк и оплата — ВСЕГДА разрешены
-    "wallet_view", "wallet_topup", "wallet_buy_plan", "wallet_withdraw",
-    # Подписка
-    "admin_main",  # администраторы
+    "wallet_view",
+    "wallet_topup",
+    "wallet_buy_plan",
+    "wallet_withdraw",
+    # Заглушка
+    "noop",
 }
 
 # Префиксы callback, разрешённые без подписки
@@ -41,22 +50,21 @@ ALLOWED_PREFIXES = (
     "buy_plan_",
     "confirm_plan_",
     "enter_promo_",
-    "sched_cancel_",   # отмена в расписании (неважно)
+    "order_pr_",
+    "reg_",
+    "policy_",
     "check_ok_",
     "check_edit_",
-    "policy_",
-    "reg_",
-    "order_pr_",
 )
 
 # Команды, всегда разрешённые
 ALLOWED_COMMANDS = {"/start", "/cancel", "/help", "/wallet"}
 
-
 LOCKED_MESSAGE = (
     "🔒 <b>Доступ ограничен</b>\n\n"
     "Для использования этой функции необходима активная подписка.\n\n"
-    "Перейди в <b>Личное → Кошелёк</b>, пополни баланс и активируй тариф."
+    "Перейди в раздел <b>Кошелёк</b>, пополни баланс и активируй тариф.\n\n"
+    "/wallet — открыть кошелёк"
 )
 
 
@@ -69,15 +77,13 @@ class SubscriptionMiddleware(BaseMiddleware):
     ) -> Any:
         user_id = None
 
-        if isinstance(event, CallbackQuery):
-            user_id = event.from_user.id
-        elif isinstance(event, Message):
+        if isinstance(event, (CallbackQuery, Message)):
             user_id = event.from_user.id
 
         if user_id is None:
             return await handler(event, data)
 
-        # Администраторы — без ограничений
+        # Администраторы — полный доступ без ограничений
         if user_id in ADMIN_IDS:
             return await handler(event, data)
 
@@ -91,21 +97,23 @@ class SubscriptionMiddleware(BaseMiddleware):
         if has_sub:
             return await handler(event, data)
 
-        # — нет подписки —
+        # ─── Нет подписки ───
 
         if isinstance(event, Message):
             text = (event.text or "").strip()
+
             # Разрешаем команды
             if any(text.startswith(cmd) for cmd in ALLOWED_COMMANDS):
                 return await handler(event, data)
-            # Разрешаем ввод данных в FSM (пусть handler сам решает)
-            # Для этого проверяем есть ли активное FSM состояние
+
+            # Разрешаем ввод данных в активном FSM-состоянии
             state = data.get("state")
             if state:
                 current = await state.get_state()
                 if current:
                     return await handler(event, data)
-            # Блокируем произвольные текстовые сообщения
+
+            # Блокируем всё остальное
             await event.answer(LOCKED_MESSAGE, parse_mode='HTML')
             return
 
@@ -120,8 +128,8 @@ class SubscriptionMiddleware(BaseMiddleware):
 
             # Блокируем
             await event.answer(
-                "🔒 Для доступа нужна активная подписка.\n"
-                "Перейди: Личное → Кошелёк → Купить тариф",
+                "🔒 Нужна активная подписка.\n"
+                "Перейди: Кошелёк → Купить тариф",
                 show_alert=True
             )
             return

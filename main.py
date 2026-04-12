@@ -1,10 +1,5 @@
 """
 main.py
-
-ИЗМЕНЕНИЯ:
-- Добавлены роутеры: schedule, lectures, attendance, billing
-- Добавлен SubscriptionMiddleware
-- Добавлен aiohttp-сервер для вебхука ЮKassa
 """
 
 import asyncio
@@ -38,14 +33,17 @@ WEBHOOK_PORT = int(os.getenv("PORT", 8080))
 if not TOKEN:
     raise ValueError("❌ TOKEN не найден в .env")
 
+# Проверяем ADMIN_IDS
+_admin_ids_raw = os.getenv("ADMIN_IDS", "")
+if not _admin_ids_raw:
+    raise ValueError("❌ ADMIN_IDS не найден в .env. Добавьте: ADMIN_IDS=808603029,1991833177,1114949712")
+
 if PROXY:
     print(f"🌐 Использую прокси: {PROXY}")
     session = AiohttpSession(proxy=PROXY)
 else:
     print("🌐 Запуск без прокси")
     session = AiohttpSession()
-
-# session = AiohttpSession()
 
 bot = Bot(
     token=TOKEN,
@@ -69,7 +67,7 @@ async def set_commands(bot: Bot):
 async def main():
     logging.basicConfig(level=logging.INFO)
 
-    # ⚠️ Порядок роутеров важен
+    # ⚠️ Порядок роутеров важен — registration должен быть первым
     dp.include_router(registration.router)
     dp.include_router(profile.router)
     dp.include_router(admin.router)
@@ -84,12 +82,12 @@ async def main():
     dp.include_router(pomodoro.router)
     dp.include_router(todo.router)
 
-    # ⬅️ Middleware проверки подписки (после регистрации роутеров)
+    # Middleware проверки подписки
     dp.update.middleware(SubscriptionMiddleware())
 
     await set_commands(bot)
 
-    # ⬅️ aiohttp-сервер для вебхука ЮKassa
+    # aiohttp-сервер для вебхука ЮKassa
     app = web.Application()
     app["bot"] = bot
     app.router.add_post("/yookassa/webhook", yookassa_webhook)
@@ -99,10 +97,12 @@ async def main():
     await runner.setup()
     site = web.TCPSite(runner, host="0.0.0.0", port=WEBHOOK_PORT)
     await site.start()
-    print(f"✅ aiohttp запущен на порту {WEBHOOK_PORT}")
 
-    print("✅ Бот запущен!")
-    print("✅ MongoDB подключена!")
+    admin_ids = os.getenv("ADMIN_IDS", "")
+    print(f"✅ aiohttp запущен на порту {WEBHOOK_PORT}")
+    print(f"✅ Бот запущен!")
+    print(f"✅ MongoDB подключена!")
+    print(f"✅ Админы: {admin_ids}")
 
     try:
         await dp.start_polling(bot)
