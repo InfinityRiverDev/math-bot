@@ -303,9 +303,13 @@ async def cmd_focus(callback: CallbackQuery):
 # ========================
 # Отмена
 # ========================
+from middlewares.subscription_check import check_sub
 
 @router.message(Command('cancel'))
 async def cmd_cancel(message: Message, state: FSMContext):
+    if not await check_sub(message.from_user.id, message):
+        return
+
     await state.update_data(cancelled=True)
     await asyncio.sleep(0.1)
 

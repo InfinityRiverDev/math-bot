@@ -13,6 +13,7 @@ from aiogram.types import TelegramObject, CallbackQuery, Message
 
 from database.billing_models import has_active_subscription
 from database.models import is_registered
+from database.models import is_banned, get_user_full
 from handlers.admin import ADMIN_IDS
 
 
@@ -92,6 +93,31 @@ class SubscriptionMiddleware(BaseMiddleware):
         if not registered:
             return await handler(event, data)
 
+        # 🔴 БАН — САМЫЙ ВАЖНЫЙ БЛОК
+        if await is_banned(user_id):
+            if isinstance(event, Message):
+                await event.answer("🚫 <b>Вы заблокированы</b>", parse_mode='HTML')
+            elif isinstance(event, CallbackQuery):
+                await event.answer("🚫 Вы заблокированы", show_alert=True)
+            return
+
+        # # 🔴 Проверка бана
+        # if await is_banned(user_id):
+        #     user = await get_user_full(user_id)
+        #     reason = user.get("ban_reason")
+        #
+        #     text = "🚫 <b>Вы заблокированы в боте</b>"
+        #
+        #     if reason:
+        #         text += f"\n\n📝 Причина: <i>{reason}</i>"
+        #
+        #     if isinstance(event, Message):
+        #         await event.answer(text, parse_mode='HTML')
+        #     elif isinstance(event, CallbackQuery):
+        #         await event.answer("🚫 Вы заблокированы", show_alert=True)
+        #
+        #     return
+
         # Проверка подписки
         has_sub = await has_active_subscription(user_id)
         if has_sub:
@@ -135,3 +161,22 @@ class SubscriptionMiddleware(BaseMiddleware):
             return
 
         return await handler(event, data)
+
+
+
+# =======================================================================================================
+### Функция, которую можно вставить в любом месте бота и при любом действии для проверки наличия подписки
+# =======================================================================================================
+
+async def check_sub(user_id, message):
+    from database.billing_models import has_active_subscription
+    if not await has_active_subscription(user_id):
+        await message.answer("❌ <b>Сначала оплатите подписку</b>", parse_mode='HTML')
+        return False
+    return True
+
+# Вставлять этот код в нужном месте:
+# if not await check_sub(message.from_user.id, message):
+#     return
+
+# =======================================================================================================

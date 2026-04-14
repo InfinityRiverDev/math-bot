@@ -12,6 +12,8 @@ plans        = db["plans"]         # Тарифы (создаются админ
 subscriptions = db["subscriptions"] # Активные подписки
 promo_codes  = db["promo_codes"]   # Промокоды
 payments     = db["payments"]      # История платежей (ЮKassa)
+plan_purchases = db["plan_purchases"]
+promo_usage = db["promo_usage"]
 
 
 # ===========================
@@ -138,7 +140,7 @@ async def delete_promo(promo_id: str):
     await promo_codes.delete_one({"_id": ObjectId(promo_id)})
 
 
-async def use_promo(code: str):
+async def use_promo(code: str, user_id: int):
     """Увеличивает счётчик использований; деактивирует если исчерпан."""
     doc = await promo_codes.find_one({"code": code.upper()})
     if not doc:
@@ -149,6 +151,7 @@ async def use_promo(code: str):
     if max_uses > 0 and new_count >= max_uses:
         update["$set"]["active"] = False
     await promo_codes.update_one({"_id": doc["_id"]}, update)
+    await log_promo_usage(user_id, code)
 
 
 # ===========================
@@ -171,7 +174,7 @@ async def has_active_subscription(user_id: int) -> bool:
     return sub is not None
 
 
-async def activate_subscription(user_id: int, plan_id: str, duration_days: int, plan_name: str):
+async def activate_subscription(user_id: int, plan_id: str, duration_days: int, plan_name: str, price: float):
     """Активирует подписку (продлевает если уже есть активная)."""
     existing = await get_active_subscription(user_id)
 
@@ -193,6 +196,8 @@ async def activate_subscription(user_id: int, plan_id: str, duration_days: int, 
         }},
         upsert=True
     )
+
+    await log_plan_purchase(user_id, plan_name, price)
 
 
 # ===========================
@@ -221,3 +226,43 @@ async def update_payment_status(payment_id: str, status: str):
         {"payment_id": payment_id},
         {"$set": {"status": status, "updated_at": datetime.now().isoformat()}}
     )
+
+
+# ===========================
+# ЛОГ ПОКУПОК ТАРИФА
+# ===========================
+
+async def log_plan_purchase(user_id: int, plan_name: str, amount: float):
+    await plan_purchases.insert_one({
+        "user_id": user_id,
+        "plan_name": plan_name,
+        "amount": amount,
+        "created_at": datetime.now().isoformat()
+    })
+
+
+# ===========================
+# ЛОГ ПРОМОКОДОВ
+# ===========================
+
+async def log_promo_usage(user_id: int, code: str):
+    await promo_usage.insert_one({
+        "user_id": user_id,
+        "promo_code": code,
+        "created_at": datetime.now().isoformat()
+    })
+
+
+# ===========================
+# ПОЛУЧЕНИЕ СТАТИСТИКИ
+# ===========================
+
+async def get_all_plan_purchases():
+    cursor = plan_purchases.find({})
+    return [doc async for doc in cursor]
+
+
+async def get_all_promo_usage():
+    cursor = promo_usage.find({})
+    return [doc async for doc in cursor]
+

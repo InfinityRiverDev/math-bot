@@ -139,8 +139,9 @@ order_pr_5 = order_pr_1
 personal = InlineKeyboardMarkup(inline_keyboard=[
     [InlineKeyboardButton(text="👤 Профиль",     callback_data="profile")],
     [InlineKeyboardButton(text="💼 Кошелёк",    callback_data="wallet_view")],
-    [InlineKeyboardButton(text="💬 Поддержка",  url="https://t.me/udhdhduduuwu")],
     [InlineKeyboardButton(text="🌐 Наш сайт",   url="https://infinityriverdev.github.io/math-bot-site/")],
+    [InlineKeyboardButton(text="🗣️ Отзывы", url="https://t.me/MathTutor_feedback")],
+    [InlineKeyboardButton(text="💬 Поддержка", url="https://t.me/udhdhduduuwu")],
     [InlineKeyboardButton(text="⬅️ Назад",       callback_data="back_to_main")]
 ])
 
@@ -165,6 +166,8 @@ admin_panel = InlineKeyboardMarkup(inline_keyboard=[
     [InlineKeyboardButton(text="🎟 Промокоды",           callback_data="admin_promos")],
     [InlineKeyboardButton(text="📝 Добавить лекцию",     callback_data="admin_add_lecture")],
     [InlineKeyboardButton(text="📢 Рассылка",            callback_data="admin_broadcast")],
+    [InlineKeyboardButton(text="🔍 Поиск по ID",         callback_data="admin_find_user")],
+    [InlineKeyboardButton(text="🚫 Баны",                callback_data="admin_bans")],
     [InlineKeyboardButton(text="💰 Чистая прибыль",      callback_data="admin_profit")],
     [InlineKeyboardButton(text="⚠️ Самоликвидация!!! ⚠️", callback_data="self_destruction")],
     [InlineKeyboardButton(text="⬅️ Назад",               callback_data="back_to_main")]

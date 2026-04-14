@@ -22,6 +22,8 @@ from database.stats_models import (
     stats_users, stats_finance, stats_activity,
     stats_top_xp, stats_registrations_chart, get_full_stats,
 )
+from database.billing_models import get_all_plan_purchases, get_all_promo_usage
+from database.models import get_user_profile
 
 
 router = Router()
@@ -170,6 +172,10 @@ async def stats_show_finance(callback: CallbackQuery):
     await callback.answer()
     f = await stats_finance()
 
+    purchases = await get_all_plan_purchases()
+    promos = await get_all_promo_usage()
+
+    # 📦 продажи по тарифам
     plan_lines = ""
     if f["plan_sales"]:
         for pname, data in sorted(f["plan_sales"].items(), key=lambda x: -x[1]["count"]):
@@ -177,6 +183,7 @@ async def stats_show_finance(callback: CallbackQuery):
     else:
         plan_lines = "  Данных пока нет\n"
 
+    # 🎟 промокоды (агрегировано)
     promo_lines = ""
     if f["promo_stats"]:
         for p in sorted(f["promo_stats"], key=lambda x: -x["uses"]):
@@ -187,6 +194,30 @@ async def stats_show_finance(callback: CallbackQuery):
             )
     else:
         promo_lines = "  Промокодов нет\n"
+
+    # 💳 последние покупки
+    purchase_users = ""
+    if purchases:
+        purchase_users += "\n💳 <b>Кто покупал тарифы:</b>\n"
+        for p in purchases[-10:]:
+            user = await get_user_profile(p["user_id"])
+            username = user.get("username", "—") if user else "—"
+
+            purchase_users += f"  • {p['plan_name']} — @{username} ({p['user_id']})\n"
+    else:
+        purchase_users = "\n💳 Нет покупок\n"
+
+    # 🎟 кто использовал промо
+    promo_users = ""
+    if promos:
+        promo_users += "\n🎟 <b>Кто использовал промокоды:</b>\n"
+        for p in promos[-10:]:
+            user = await get_user_profile(p["user_id"])
+            username = user.get("username", "—") if user else "—"
+
+            promo_users += f"  • {p['promo_code']} — @{username} ({p['user_id']})\n"
+    else:
+        promo_users = "\n🎟 Нет использований\n"
 
     text = (
         "💰 <b>Финансы</b>\n"
@@ -206,7 +237,11 @@ async def stats_show_finance(callback: CallbackQuery):
 
         "🎟 <b>Промокоды</b>\n"
         f"{promo_lines}"
+
+        f"{purchase_users}"
+        f"{promo_users}"
     )
+
     await safe_edit(callback.message, text, kb_back_with_export())
 
 

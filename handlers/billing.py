@@ -155,8 +155,12 @@ async def show_wallet(event, state: FSMContext):
             parse_mode='HTML'
         )
 
+from middlewares.subscription_check import check_sub
+
 @router.message(Command("wallet"))
 async def wallet_command(message: Message, state: FSMContext):
+    if not await check_sub(message.from_user.id, message):
+        return
     await show_wallet(message, state)
 
 
@@ -443,14 +447,16 @@ async def confirm_plan_purchase(callback: CallbackQuery, state: FSMContext):
 
     # 🎟 Промокод
     if promo:
-        await use_promo(promo["code"])
+        await use_promo(promo["code"], callback.from_user.id)
+
 
     # 🚀 Активируем подписку
     await activate_subscription(
         user_id=user_id,
         plan_id=plan_id,
         duration_days=plan["duration_days"],
-        plan_name=plan["name"]
+        plan_name=plan["name"],
+        price=plan["price"]
     )
 
     sub = await get_active_subscription(user_id)

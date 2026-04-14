@@ -50,6 +50,15 @@ class AdminStates(StatesGroup):
     broadcast_text_all   = State()   # текст для рассылки всем
     broadcast_ids        = State()   # ввод ID получателей
     broadcast_text_ids   = State()   # текст для рассылки по ID
+    # Баны
+    ban_ids = State()
+    ban_confirm = State()
+    unban_ids = State()
+    unban_confirm = State()
+    ban_duration = State()
+    ban_reason = State()
+    # Поиск юзера
+    find_user_ids = State()
 
 
 def is_admin(message: Message) -> bool:
@@ -451,6 +460,290 @@ async def admin_promo_delete(callback: CallbackQuery):
     await delete_promo(promo_id)
     await callback.answer("🗑 Промокод удалён")
     await callback.message.edit_text("🎟 <b>Промокоды</b>", reply_markup=await promos_admin_kb(), parse_mode='HTML')
+
+
+# ===========================
+# 🚫 БАНЫ
+# ===========================
+
+# ===========================
+# 🚫 БАНЫ
+# ===========================
+
+import re
+from database.models import ban_user, unban_user
+
+# ───────────────
+# МЕНЮ БАНОВ
+# ───────────────
+
+@router.callback_query(F.data == "admin_bans", F.from_user.id.in_(ADMIN_IDS))
+async def admin_bans_menu(callback: CallbackQuery):
+    kb_bans = InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton(text="🚫 Забанить", callback_data="admin_ban_start")],
+        [InlineKeyboardButton(text="✅ Разбанить", callback_data="admin_unban_start")],
+        [InlineKeyboardButton(text="⬅️ Назад", callback_data="admin_main")]
+    ])
+    await callback.message.edit_text(
+        "🚫 <b>Баны пользователей</b>",
+        reply_markup=kb_bans,
+        parse_mode='HTML'
+    )
+    await callback.answer()
+
+
+# ───────────────
+# БАН — ввод ID
+# ───────────────
+
+@router.callback_query(F.data == "admin_ban_start", F.from_user.id.in_(ADMIN_IDS))
+async def ban_start(callback: CallbackQuery, state: FSMContext):
+    await state.set_state(AdminStates.ban_ids)
+    await callback.message.edit_text(
+        "Введи ID (можно несколько):\n\n"
+        "<i>Пример: 123456789, 987654321</i>",
+        parse_mode='HTML'
+    )
+
+
+# ───────────────
+# ПОЛУЧИЛИ ID
+# ───────────────
+
+@router.message(AdminStates.ban_ids, F.from_user.id.in_(ADMIN_IDS))
+async def ban_ids(message: Message, state: FSMContext):
+    ids = list(set(int(x) for x in re.findall(r'\d+', message.text)))
+
+    if not ids:
+        await message.answer("❌ Введи корректные ID")
+        return
+
+    await state.update_data(ids=ids)
+
+    kb = InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton(text="♾ Навсегда", callback_data="ban_forever")],
+        [InlineKeyboardButton(text="⏳ Временный бан", callback_data="ban_temp")],
+        [InlineKeyboardButton(text="❌ Отмена", callback_data="admin_bans")]
+    ])
+
+    await message.answer(f"Выбери тип бана для:\n<code>{ids}</code>", reply_markup=kb, parse_mode='HTML')
+
+
+# ───────────────
+# БАН НАВСЕГДА
+# ───────────────
+
+@router.callback_query(F.data == "ban_forever", F.from_user.id.in_(ADMIN_IDS))
+async def ban_forever(callback: CallbackQuery, state: FSMContext):
+    await state.update_data(duration_hours=None)
+    await state.set_state(AdminStates.ban_reason)
+
+    await callback.message.edit_text("📝 Введи причину бана:")
+
+
+# ───────────────
+# ВРЕМЕННЫЙ БАН
+# ───────────────
+
+@router.callback_query(F.data == "ban_temp", F.from_user.id.in_(ADMIN_IDS))
+async def ban_temp(callback: CallbackQuery, state: FSMContext):
+    await state.set_state(AdminStates.ban_duration)
+
+    await callback.message.edit_text(
+        "⏱ Введи длительность:\n\n"
+        "• В часах: <code>12</code>\n"
+        "• В днях: <code>2d</code>\n\n"
+        "<i>Примеры: 24, 48, 7d</i>",
+        parse_mode='HTML'
+    )
+
+
+# ───────────────
+# ПАРСИНГ ВРЕМЕНИ
+# ───────────────
+
+@router.message(AdminStates.ban_duration, F.from_user.id.in_(ADMIN_IDS))
+async def ban_duration(message: Message, state: FSMContext):
+    text = message.text.strip().lower()
+
+    try:
+        if text.endswith("d"):
+            days = int(text[:-1])
+            hours = days * 24
+        else:
+            hours = int(text)
+    except:
+        await message.answer("❌ Неверный формат")
+        return
+
+    await state.update_data(duration_hours=hours)
+    await state.set_state(AdminStates.ban_reason)
+
+    await message.answer("📝 Введи причину бана:")
+
+
+# ───────────────
+# ПРИЧИНА
+# ───────────────
+
+@router.message(AdminStates.ban_reason, F.from_user.id.in_(ADMIN_IDS))
+async def ban_reason(message: Message, state: FSMContext):
+    await state.update_data(reason=message.text)
+
+    data = await state.get_data()
+
+    kb_confirm = InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton(text="✅ Подтвердить", callback_data="ban_confirm")],
+        [InlineKeyboardButton(text="❌ Отмена", callback_data="admin_bans")]
+    ])
+
+    await message.answer(
+        f"🚫 <b>Подтверждение бана</b>\n\n"
+        f"👤 ID: <code>{data.get('ids')}</code>\n"
+        f"⏱ Срок: {'навсегда' if not data.get('duration_hours') else str(data.get('duration_hours')) + ' часов'}\n"
+        f"📝 Причина: {data.get('reason')}",
+        reply_markup=kb_confirm,
+        parse_mode='HTML'
+    )
+
+
+# ───────────────
+# ПРИМЕНЕНИЕ БАНА
+# ───────────────
+
+@router.callback_query(F.data == "ban_confirm", F.from_user.id.in_(ADMIN_IDS))
+async def ban_apply(callback: CallbackQuery, state: FSMContext, bot: Bot):
+    data = await state.get_data()
+
+    ids = data.get("ids", [])
+    hours = data.get("duration_hours")
+    reason = data.get("reason")
+
+    for uid in ids:
+        await ban_user(uid, hours, reason)
+
+        # уведомление пользователю
+        try:
+            text = "🚫 <b>Вы заблокированы</b>"
+
+            if hours:
+                text += f"\n⏱ Срок: {hours} часов"
+            else:
+                text += "\n♾ Навсегда"
+
+            if reason:
+                text += f"\n📝 Причина: {reason}"
+
+            await bot.send_message(uid, text, parse_mode='HTML')
+        except:
+            pass
+
+    await state.clear()
+    await callback.message.edit_text(
+        "✅ Пользователи успешно забанены",
+        reply_markup=kb.admin_panel
+    )
+
+
+# ───────────────
+# РАЗБАН
+# ───────────────
+
+@router.callback_query(F.data == "admin_unban_start", F.from_user.id.in_(ADMIN_IDS))
+async def unban_start(callback: CallbackQuery, state: FSMContext):
+    await state.set_state(AdminStates.unban_ids)
+    await callback.message.edit_text("Введи ID для разбана:")
+
+
+@router.message(AdminStates.unban_ids, F.from_user.id.in_(ADMIN_IDS))
+async def unban_users(message: Message, state: FSMContext, bot: Bot):
+    ids = list(set(int(x) for x in re.findall(r'\d+', message.text)))
+
+    if not ids:
+        await message.answer("❌ Введи ID")
+        return
+
+    for uid in ids:
+        await unban_user(uid)
+
+        try:
+            await bot.send_message(uid, "✅ <b>Вы были разблокированы</b>", parse_mode='HTML')
+        except:
+            pass
+
+    await state.clear()
+    await message.answer(
+        "✅ Пользователи разбанены",
+        reply_markup=kb.admin_panel
+    )
+
+
+# ===========================
+# ✅ РАЗБАН
+# ===========================
+
+@router.callback_query(F.data == "admin_unban_start", F.from_user.id.in_(ADMIN_IDS))
+async def unban_start(callback: CallbackQuery, state: FSMContext):
+    await state.set_state(AdminStates.unban_ids)
+    await callback.message.edit_text("Введи ID для разбана:")
+
+
+from database.models import unban_user
+
+@router.message(AdminStates.unban_ids, F.from_user.id.in_(ADMIN_IDS))
+async def unban_users(message: Message, state: FSMContext, bot: Bot):
+    import re
+
+    ids = list(set(int(x) for x in re.findall(r'\d+', message.text)))
+
+    for uid in ids:
+        await unban_user(uid)
+
+        # 🔥 уведомление
+        try:
+            await bot.send_message(uid, "✅ <b>Вы были разблокированы</b>", parse_mode='HTML')
+        except:
+            pass
+
+    await state.clear()
+    await message.answer("✅ Пользователи разбанены", reply_markup=kb.admin_panel)
+
+
+# ===========================
+# Поиск пользователя
+# =========================
+
+@router.callback_query(F.data == "admin_find_user", F.from_user.id.in_(ADMIN_IDS))
+async def find_user_start(callback: CallbackQuery, state: FSMContext):
+    await state.set_state(AdminStates.find_user_ids)
+    await callback.message.edit_text("Введи ID пользователя:")
+
+
+from database.models import get_user_full
+
+@router.message(AdminStates.find_user_ids, F.from_user.id.in_(ADMIN_IDS))
+async def find_user(message: Message, state: FSMContext):
+    import re
+    ids = list(set(int(x) for x in re.findall(r'\d+', message.text)))
+
+    result = ""
+
+    for uid in ids:
+        user = await get_user_full(uid)
+        if not user:
+            result += f"\n❌ {uid} — не найден\n"
+            continue
+
+        result += (
+            f"\n👤 <b>{user.get('first_name')} {user.get('last_name')}</b>\n"
+            f"🆔 {uid}\n"
+            f"📛 @{user.get('username')}\n"
+            f"🏛 {user.get('institute')}\n"
+            f"📚 {user.get('group_number')}\n"
+        )
+
+    await state.clear()
+    await message.answer(result, parse_mode='HTML')
 
 
 # ===========================

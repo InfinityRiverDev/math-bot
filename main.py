@@ -83,7 +83,9 @@ async def main():
     dp.include_router(todo.router)
 
     # Middleware проверки подписки
-    dp.update.middleware(SubscriptionMiddleware())
+    # dp.update.middleware(SubscriptionMiddleware()) # старое
+    dp.message.middleware(SubscriptionMiddleware())
+    dp.callback_query.middleware(SubscriptionMiddleware())
 
     await set_commands(bot)
 

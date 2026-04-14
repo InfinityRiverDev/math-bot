@@ -7,6 +7,7 @@ database/models.py
 
 from datetime import datetime
 from database.mongo import users
+from datetime import datetime, timedelta
 
 
 async def register_user(user_id: int, username: str):
@@ -19,6 +20,7 @@ async def register_user(user_id: int, username: str):
                 "first_seen": datetime.now().isoformat(),
                 "xp": 0,
                 "subscription": False,
+                "banned": False,
                 "tutor_history": []
             }
         },
@@ -101,3 +103,51 @@ async def update_history(user_id: int, history: list):
         {"user_id": user_id},
         {"$set": {"tutor_history": history}}
     )
+
+async def ban_user(user_id: int, duration_hours: int = None, reason: str = None):
+    data = {
+        "banned": True,
+        "ban_reason": reason
+    }
+
+    if duration_hours:
+        until = datetime.now() + timedelta(hours=duration_hours)
+        data["ban_until"] = until.isoformat()
+    else:
+        data["ban_until"] = None
+
+    await users.update_one(
+        {"user_id": user_id},
+        {"$set": data}
+    )
+
+async def unban_user(user_id: int):
+    await users.update_one(
+        {"user_id": user_id},
+        {"$set": {
+            "banned": False,
+            "ban_until": None,
+            "ban_reason": None
+        }}
+    )
+
+async def is_banned(user_id: int) -> bool:
+    user = await users.find_one({"user_id": user_id})
+    if not user:
+        return False
+
+    if not user.get("banned"):
+        return False
+
+    ban_until = user.get("ban_until")
+
+    if ban_until:
+        from datetime import datetime
+        if datetime.now() > datetime.fromisoformat(ban_until):
+            await unban_user(user_id)
+            return False
+
+    return True
+
+async def get_user_full(user_id: int):
+    return await users.find_one({"user_id": user_id})
