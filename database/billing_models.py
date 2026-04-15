@@ -6,6 +6,8 @@ database/billing_models.py
 from datetime import datetime, timedelta
 from bson import ObjectId
 from database.mongo import db
+from datetime import datetime
+
 
 wallets      = db["wallets"]       # Кошельки пользователей
 plans        = db["plans"]         # Тарифы (создаются админом)
@@ -300,3 +302,16 @@ async def activate_trial(user_id: int):
         "user_id": user_id,
         "activated_at": datetime.now().isoformat()
     })
+
+
+async def has_real_subscription(user_id: int) -> bool:
+    sub = await db["subscriptions"].find_one({"user_id": user_id})
+
+    if not sub:
+        return False
+
+    expires = sub.get("expires_at")
+    if not expires:
+        return False
+
+    return datetime.fromisoformat(expires) > datetime.now()

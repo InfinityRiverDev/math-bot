@@ -625,9 +625,9 @@ async def trial_activate_handler(callback: CallbackQuery):
     user_id = callback.from_user.id
 
     # есть подписка
-    from database.billing_models import has_active_subscription
-    if await has_active_subscription(user_id):
-        await callback.answer("❌ У тебя уже есть подписка", show_alert=True)
+    from database.billing_models import has_real_subscription
+    if await has_real_subscription(user_id):
+        await callback.answer("❌ У тебя уже есть активная подписка", show_alert=True)
         return
 
     # уже использовал trial

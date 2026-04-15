@@ -29,25 +29,6 @@ class CalculatorStates(StatesGroup):
     practice_waiting = State()
 
 
-@router.message(CommandStart())
-async def cmd_start(message: Message, state: FSMContext):
-    await state.clear()
-
-    user_id = message.from_user.id
-    username = message.from_user.username or "NoUsername"
-
-    await register_user(user_id, username)
-
-    is_admin = user_id in ADMIN_IDS
-
-    await message.answer(
-        '👋 <b>Добро пожаловать в Math Tutor!</b>\n\n'
-                    '🤖 Я помогу тебе с математикой, прослежу за твоим расписанием '
-                    'и автоматически отмечу тебя на парах.\n\n'
-                    '👇 Выбери раздел:',
-        reply_markup=kb.get_start_kb(is_admin),
-        parse_mode='HTML'
-    )
 
 
 # ========================
