@@ -48,6 +48,18 @@ async def cmd_ai_tutor_menu(callback: CallbackQuery):
         if "message is not modified" not in str(e):
             raise
 
+@router.callback_query(F.data == 'back_to_ai_tutor_menu')
+async def cmd_back_to_ai_tutor_menu(callback: CallbackQuery):
+    await callback.answer()
+    try:
+        await callback.message.edit_text(
+            '<b>🎓 ИИ-репетитор</b>\nВыбери что хочешь сделать:',
+            reply_markup=kb.ai_tutor_menu,
+            parse_mode='HTML'
+        )
+    except TelegramBadRequest as e:
+        if "message is not modified" not in str(e):
+            raise
 
 @router.callback_query(F.data == 'practice')
 async def cmd_practice(callback: CallbackQuery, state: FSMContext):
@@ -59,6 +71,15 @@ async def cmd_practice(callback: CallbackQuery, state: FSMContext):
         'Напиши тему — и я дам тебе задачи для тренировки.\n\n'
         'Например: <code>производная</code>, <code>интегралы</code>, <code>пределы</code>\n\n'
         'Для выхода напиши /cancel',
+        parse_mode='HTML'
+    )
+
+@router.callback_query(F.data == 'ai_additional_functions')
+async def cmd_ai_additional_functions(callback: CallbackQuery, state: FSMContext):
+    await callback.answer()
+    await callback.message.edit_text(
+        'Выберите:',
+        reply_markup=kb.ai_additional_functions,
         parse_mode='HTML'
     )
 

@@ -60,9 +60,18 @@ def get_locked_kb(is_admin: bool) -> InlineKeyboardMarkup:
 ai_tutor_menu = InlineKeyboardMarkup(inline_keyboard=[
     [InlineKeyboardButton(text="🎓 ИИ-репетитор", callback_data="ai-tutor")],
     [InlineKeyboardButton(text="✍️ Практика",      callback_data="practice")],
+    [InlineKeyboardButton(text="💡 Дополнительные функции", callback_data="ai_additional_functions")],
     [InlineKeyboardButton(text="⬅️ Назад",          callback_data="back_to_main")]
 ])
 
+ai_additional_functions = InlineKeyboardMarkup(inline_keyboard=[
+    [InlineKeyboardButton(text="Графический калькулятор", callback_data="graphical_calculator")],
+    [InlineKeyboardButton(text="Научный калькулятор", callback_data="scientific_calculator")],
+    [InlineKeyboardButton(text="Арифметический калькулятор", callback_data="arithmetic_calculator")],
+    [InlineKeyboardButton(text="3D-калькулятор", callback_data="3D_calculator")],
+    [InlineKeyboardButton(text="Геометрические инструменты", callback_data="geometric_tools")],
+    [InlineKeyboardButton(text="⬅️ Назад", callback_data="back_to_ai_tutor_menu")]
+])
 
 # =========================
 # 📚 Образование
