@@ -44,6 +44,7 @@ ALLOWED_CALLBACKS = {
     "wallet_withdraw",
     # Заглушка
     "noop",
+    "trial_activate"
 }
 
 # Префиксы callback, разрешённые без подписки
