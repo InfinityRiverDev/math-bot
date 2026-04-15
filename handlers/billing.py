@@ -624,25 +624,30 @@ async def yookassa_webhook(request: web.Request, bot: Bot) -> web.Response:
 async def trial_activate_handler(callback: CallbackQuery):
     user_id = callback.from_user.id
 
-    # есть подписка
-    from database.billing_models import has_real_subscription
+    from database.billing_models import (
+        has_used_trial,
+        activate_trial,
+        has_real_subscription
+    )
+
+    # ❌ Уже есть активная подписка
     if await has_real_subscription(user_id):
         await callback.answer("❌ У тебя уже есть активная подписка", show_alert=True)
         return
 
-    # уже использовал trial
+    # ❌ Уже использовал trial
     if await has_used_trial(user_id):
-        await callback.answer("❌ Пробный период уже использован", show_alert=True)
+        await callback.answer("❌ Вы уже активировали пробный период ранее", show_alert=True)
         return
 
+    # ✅ Активируем trial
     await activate_trial(user_id)
 
     await callback.message.edit_text(
         "🎉 <b>Пробный период активирован!</b>\n\n"
         "⏳ Доступ на <b>2 дня</b>\n"
         "После этого потребуется подписка.",
-        parse_mode='HTML',
-        reply_markup=wallet_kb()
+        parse_mode='HTML'
     )
 
     await callback.answer()
