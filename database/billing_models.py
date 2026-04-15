@@ -266,3 +266,37 @@ async def get_all_promo_usage():
     cursor = promo_usage.find({})
     return [doc async for doc in cursor]
 
+
+# ====================================
+
+from datetime import datetime, timedelta
+from database.mongo import db
+
+trial_usage = db["trial_usage"]
+
+
+async def has_used_trial(user_id: int) -> bool:
+    doc = await trial_usage.find_one({"user_id": user_id})
+    return doc is not None
+
+
+async def activate_trial(user_id: int):
+    expires = datetime.now() + timedelta(days=2)
+
+    await db["subscriptions"].update_one(
+        {"user_id": user_id},
+        {"$set": {
+            "user_id": user_id,
+            "plan_id": "trial",
+            "plan_name": "🎁 Пробный период",
+            "activated_at": datetime.now().isoformat(),
+            "expires_at": expires.isoformat(),
+            "is_trial": True
+        }},
+        upsert=True
+    )
+
+    await trial_usage.insert_one({
+        "user_id": user_id,
+        "activated_at": datetime.now().isoformat()
+    })

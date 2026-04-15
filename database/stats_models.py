@@ -235,3 +235,15 @@ async def get_full_stats() -> dict:
         "reg_chart": rc,
         "generated_at": datetime.now().strftime("%d.%m.%Y %H:%M"),
     }
+
+
+# ==================================================
+
+from database.mongo import db
+
+trial_usage = db["trial_usage"]
+
+
+async def get_trial_users():
+    cursor = trial_usage.find({})
+    return [doc async for doc in cursor]

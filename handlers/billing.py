@@ -31,6 +31,7 @@ from aiogram.types import (
 )
 from aiohttp import web
 from dotenv import load_dotenv
+from database.billing_models import has_used_trial, activate_trial
 
 import keyboards.user_kb as kb
 from database.billing_models import (
@@ -69,9 +70,10 @@ class BillingStates(StatesGroup):
 def wallet_kb() -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(inline_keyboard=[
         [InlineKeyboardButton(text="➕ Пополнить кошелёк", callback_data="wallet_topup")],
-        [InlineKeyboardButton(text="📦 Купить тариф",       callback_data="wallet_buy_plan")],
-        [InlineKeyboardButton(text="📤 Вывод средств",      callback_data="wallet_withdraw")],
-        [InlineKeyboardButton(text="⬅️ Назад",              callback_data="personal")],
+        [InlineKeyboardButton(text="📦 Купить тариф", callback_data="wallet_buy_plan")],
+        [InlineKeyboardButton(text="🎁 Пробный период", callback_data="trial_activate")],
+        [InlineKeyboardButton(text="📤 Вывод средств", callback_data="wallet_withdraw")],
+        [InlineKeyboardButton(text="⬅️ Назад", callback_data="personal")],
     ])
 
 
@@ -614,3 +616,33 @@ async def yookassa_webhook(request: web.Request, bot: Bot) -> web.Response:
             print(f"Webhook notify error: {e}")
 
     return web.Response(status=200)
+
+
+# =============================================
+
+@router.callback_query(F.data == "trial_activate")
+async def trial_activate_handler(callback: CallbackQuery):
+    user_id = callback.from_user.id
+
+    # есть подписка
+    from database.billing_models import has_active_subscription
+    if await has_active_subscription(user_id):
+        await callback.answer("❌ У тебя уже есть подписка", show_alert=True)
+        return
+
+    # уже использовал trial
+    if await has_used_trial(user_id):
+        await callback.answer("❌ Пробный период уже использован", show_alert=True)
+        return
+
+    await activate_trial(user_id)
+
+    await callback.message.edit_text(
+        "🎉 <b>Пробный период активирован!</b>\n\n"
+        "⏳ Доступ на <b>2 дня</b>\n"
+        "После этого потребуется подписка.",
+        parse_mode='HTML',
+        reply_markup=wallet_kb()
+    )
+
+    await callback.answer()
