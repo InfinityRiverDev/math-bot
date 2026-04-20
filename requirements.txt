@@ -4,4 +4,4 @@ python-dotenv
 motor
 yandex-ai-studio-sdk
 aiohttp-socks
-gunicorn
+yt-dlp
