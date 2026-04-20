@@ -206,13 +206,40 @@ async def activate_subscription(user_id: int, plan_id: str, duration_days: int, 
 # 📋 Платежи (история)
 # ===========================
 
-async def save_payment(user_id: int, payment_id: str, amount: float, status: str):
+async def save_payment(
+    user_id: int,
+    payment_id: str,
+    amount: float,          # уже в рублях
+    status: str,
+    payment_type: str,      # "stars" | "crypto" | "yookassa"
+    original_amount: float, # сколько ввёл пользователь (stars / usdt)
+    currency: str,          # "XTR" | "USDT" | "RUB"
+    rate: float             # курс конвертации
+):
     await payments.insert_one({
         "user_id": user_id,
         "payment_id": payment_id,
-        "amount": amount,
+
+        # 💰 итог
+        "amount_rub": amount,
+
+        # 💱 исходные данные
+        "original_amount": original_amount,
+        "currency": currency,
+        "rate": rate,
+
+        # 🏷 тип платежа
+        "type": payment_type,
+
+        # 📊 статус
         "status": status,
-        "created_at": datetime.now().isoformat()
+
+        # 🛡 защита от повторного зачисления
+        "credited": False,
+
+        # 🕒 время
+        "created_at": datetime.now().isoformat(),
+        "updated_at": None,
     })
 
 

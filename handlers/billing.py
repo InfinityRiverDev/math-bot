@@ -31,7 +31,7 @@ from aiogram.types import (
 )
 from aiohttp import web
 from dotenv import load_dotenv
-from database.billing_models import has_used_trial, activate_trial
+from database.billing_models import has_used_trial, activate_trial, payments
 
 import keyboards.user_kb as kb
 from database.billing_models import (
@@ -61,6 +61,8 @@ MIN_TOPUP = 10
 class BillingStates(StatesGroup):
     waiting_topup_amount  = State()   # Ввод суммы пополнения
     waiting_promo_code    = State()   # Ввод промокода
+    waiting_stars_amount = State()
+    waiting_crypto_amount = State()
 
 
 # ===========================
@@ -69,7 +71,7 @@ class BillingStates(StatesGroup):
 
 def wallet_kb() -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(inline_keyboard=[
-        [InlineKeyboardButton(text="➕ Пополнить кошелёк", callback_data="wallet_topup")],
+        [InlineKeyboardButton(text="➕ Пополнить кошелёк", callback_data="wallet_topup_select")],
         [InlineKeyboardButton(text="📦 Купить тариф", callback_data="wallet_buy_plan")],
         [InlineKeyboardButton(text="🎁 Пробный период", callback_data="trial_activate")],
         [InlineKeyboardButton(text="📤 Вывод средств", callback_data="wallet_withdraw")],
@@ -104,6 +106,16 @@ def confirm_plan_kb(plan_id: str, final_price: float, has_promo: bool) -> Inline
     buttons.append([InlineKeyboardButton(text="⬅️ Назад", callback_data="wallet_buy_plan")])
     return InlineKeyboardMarkup(inline_keyboard=buttons)
 
+
+def stars_packages_kb():
+    return InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton(text="⭐ 50", callback_data="stars_50")],
+        [InlineKeyboardButton(text="⭐ 100", callback_data="stars_100")],
+        [InlineKeyboardButton(text="⭐ 170", callback_data="stars_170")],
+        [InlineKeyboardButton(text="⭐ 500", callback_data="stars_500")],
+        [InlineKeyboardButton(text="✏️ Ввести свою сумму", callback_data="stars_custom")],
+        [InlineKeyboardButton(text="⬅️ Назад", callback_data="wallet_topup_select")]
+    ])
 
 # ===========================
 # Команда /wallet
@@ -198,6 +210,341 @@ async def view_wallet(callback: CallbackQuery, state: FSMContext):
         reply_markup=wallet_kb(),
         parse_mode='HTML'
     )
+
+
+# ===========================
+# Выбор способа оплаты
+# ===========================
+
+@router.callback_query(F.data == "wallet_topup_select")
+async def choose_payment_method(callback: CallbackQuery):
+    await callback.answer()
+
+    wallet_topup_select = InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton(text="💳 Банковская карта", callback_data="wallet_topup")],
+        [InlineKeyboardButton(text="⭐ Telegram Stars", callback_data="topup_stars")],
+        [InlineKeyboardButton(text="🪙 Crypto (USDT)", callback_data="topup_crypto")],
+    ])
+
+    await callback.message.edit_text(
+        "💳 Выберите способ оплаты:",
+        reply_markup=wallet_topup_select
+    )
+
+
+# ===========================
+# Telegram Stars
+# ===========================
+from services.rates import stars_to_rub
+
+@router.callback_query(F.data == "topup_stars")
+async def stars_menu(callback: CallbackQuery):
+    await callback.answer()
+
+    await callback.message.edit_text(
+        "⭐ Выберите пакет или введите свою сумму:",
+        reply_markup=stars_packages_kb()
+    )
+
+@router.callback_query(F.data == "stars_custom")
+async def stars_custom(callback: CallbackQuery, state: FSMContext):
+    await callback.answer()
+    await state.set_state(BillingStates.waiting_stars_amount)
+
+    await callback.message.edit_text(
+        "⭐ Введите количество Stars:"
+    )
+
+
+@router.callback_query(F.data.startswith("stars_"))
+async def stars_package_handler(callback: CallbackQuery, bot: Bot):
+    await callback.answer()
+
+    if callback.data == "stars_custom":
+        return
+
+    stars = int(callback.data.split("_")[1])
+
+    from services.rates import stars_to_rub
+    rub = await stars_to_rub(stars)
+
+    from aiogram.types import LabeledPrice
+
+    # ✅ Для Telegram Stars: amount = кол-во звёзд БЕЗ умножения на 100
+    prices = [LabeledPrice(label="Пополнение", amount=stars)]
+
+    payment_id = f"stars_{callback.from_user.id}_{stars}"
+    rate = rub / stars if stars else 0
+
+    await save_payment(
+        user_id=callback.from_user.id,
+        payment_id=payment_id,
+        amount=rub,
+        status="pending",
+        payment_type="stars",
+        original_amount=stars,
+        currency="XTR",
+        rate=rate
+    )
+
+    await bot.send_invoice(
+        chat_id=callback.from_user.id,
+        title="Пополнение баланса",
+        description=f"{stars} ⭐ ≈ {rub:.2f} ₽",
+        payload=payment_id,
+        provider_token="",
+        currency="XTR",
+        prices=prices
+    )
+
+@router.message(BillingStates.waiting_stars_amount)
+async def stars_amount_entered(message: Message, state: FSMContext, bot: Bot):
+    try:
+        stars = float(message.text)
+    except:
+        await message.answer("❌ Введите число")
+        return
+
+    if stars <= 0:
+        await message.answer("❌ Минимум 1 Star")
+        return
+    if stars > 1500:
+        await message.answer("❌ Слишком большая сумма")
+        return
+
+    rub = await stars_to_rub(stars)
+
+    await state.clear()
+
+    from aiogram.types import LabeledPrice
+
+    # ✅ Для Telegram Stars: amount = кол-во звёзд БЕЗ умножения на 100
+    stars_int = int(stars)
+    prices = [LabeledPrice(label="Пополнение", amount=stars_int)]
+
+    rate = rub / stars if stars else 0
+    payment_id = f"stars_{message.from_user.id}_{stars_int}"
+
+    await save_payment(
+        user_id=message.from_user.id,
+        payment_id=payment_id,
+        amount=rub,
+        status="pending",
+        payment_type="stars",
+        original_amount=stars_int,
+        currency="XTR",
+        rate=rate
+    )
+
+    await bot.send_invoice(
+        chat_id=message.from_user.id,
+        title="Пополнение баланса",
+        description=f"{stars_int} ⭐ ≈ {rub:.2f} ₽",
+        payload=payment_id,
+        provider_token="",
+        currency="XTR",
+        prices=prices
+    )
+
+from aiogram.types import PreCheckoutQuery
+
+@router.pre_checkout_query()
+async def pre_checkout_handler(pre_checkout_query: PreCheckoutQuery):
+    """
+    Telegram обязательно требует ответа на pre_checkout_query.
+    Без этого кнопка оплаты будет заблокирована.
+    """
+    await pre_checkout_query.answer(ok=True)
+
+@router.message(F.successful_payment)
+async def stars_success(message: Message, bot: Bot):
+    payload = message.successful_payment.invoice_payload
+
+    if not payload.startswith("stars_"):
+        return
+
+    # payload формат: stars_{user_id}_{stars}
+    payment_id = payload
+
+    # Идемпотентность — не зачисляем дважды
+    payment = await get_payment_by_id(payment_id)
+    if payment and payment.get("credited"):
+        return
+
+    # Парсим кол-во звёзд из payload: stars_{user_id}_{stars}
+    parts = payload.split("_")
+    stars = int(parts[-1])  # последний элемент — количество звёзд
+
+    rub = await stars_to_rub(stars)
+
+    user_id = message.from_user.id
+    await top_up_balance(user_id, rub)
+    await update_payment_status(payment_id, "paid")
+    await payments.update_one(
+        {"payment_id": payment_id},
+        {"$set": {"credited": True}}
+    )
+
+    # XP за пополнение
+    try:
+        from services.xp import give_xp
+        await give_xp(bot, user_id, "wallet_topup")
+    except Exception:
+        pass
+
+    # Уведомление пользователю
+    try:
+        photo = FSInputFile("media/notifications/notification_replenishment_wallet.png")
+        await bot.send_photo(
+            user_id,
+            photo=photo,
+            caption=(
+                f"✅ <b>Кошелёк пополнен!</b>\n\n"
+                f"⭐ Звёзд: <b>{stars}</b>\n"
+                f"💰 Зачислено: <b>{rub:.2f} ₽</b>"
+            ),
+            parse_mode="HTML"
+        )
+    except Exception as e:
+        print(f"Stars notify error: {e}")
+
+
+# ===========================
+# Crypto (USDT)
+# ===========================
+
+from services.rates import usdt_to_rub
+
+@router.callback_query(F.data == "topup_crypto")
+async def crypto_input(callback: CallbackQuery, state: FSMContext):
+    await callback.answer()
+    await state.set_state(BillingStates.waiting_crypto_amount)
+
+    await callback.message.edit_text(
+        "🪙 Введите сумму в USDT:"
+    )
+
+from services.crypto import create_crypto_invoice
+
+@router.message(BillingStates.waiting_crypto_amount)
+async def crypto_amount_entered(message: Message, state: FSMContext):
+    try:
+        usdt = float(message.text)
+    except:
+        await message.answer("❌ Введите число")
+        return
+
+    if usdt <= 0:
+        await message.answer("❌ Минимум 1 USDT")
+        return
+    if usdt > 50:
+        await message.answer("❌ Слишком большая сумма")
+        return
+
+    rub = await usdt_to_rub(usdt)
+
+    invoice = await create_crypto_invoice(usdt, message.from_user.id)
+
+    pay_url = invoice["pay_url"]
+    invoice_id = invoice["invoice_id"]
+
+    # сохраняем платеж
+    rate = rub / usdt
+
+    await save_payment(
+        user_id=message.from_user.id,
+        payment_id=str(invoice_id),
+        amount=rub,
+        status="pending",
+        payment_type="crypto",
+        original_amount=usdt,
+        currency="USDT",
+        rate=rate
+    )
+
+    await state.clear()
+
+    from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
+
+    kb = InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton(text="💳 Оплатить", url=pay_url)],
+        [InlineKeyboardButton(text="✅ Я оплатил", callback_data=f"check_crypto_{invoice_id}")]
+    ])
+
+    await message.answer(
+        f"🪙 {usdt} USDT ≈ {rub:.2f} ₽\n\n"
+        f"После оплаты нажмите кнопку ниже 👇",
+        reply_markup=kb
+    )
+
+from services.crypto import is_crypto_paid
+
+@router.callback_query(F.data.startswith("check_crypto_"))
+async def check_crypto(callback: CallbackQuery):
+    await callback.answer()
+
+    invoice_id = callback.data.replace("check_crypto_", "")
+
+    paid = await is_crypto_paid(invoice_id)
+
+    if not paid:
+        await callback.answer("❌ Оплата не найдена", show_alert=True)
+        return
+
+    payment = await get_payment_by_id(invoice_id)
+
+    if payment.get("credited"):
+        await callback.answer("⚠️ Уже зачислено", show_alert=True)
+        return
+
+    await top_up_balance(
+        payment["user_id"],
+        payment["amount_rub"]
+    )
+
+    await update_payment_status(invoice_id, "paid")
+
+    await payments.update_one(
+        {"payment_id": invoice_id},
+        {"$set": {"credited": True}}
+    )
+
+    # 💰 зачисляем
+    await top_up_balance(
+        payment["user_id"],
+        payment["amount_rub"]
+    )
+
+    await update_payment_status(invoice_id, "paid")
+
+    await payments.update_one(
+        {"payment_id": invoice_id},
+        {"$set": {"credited": True}}
+    )
+
+    # 🎯 XP (как у других оплат)
+    try:
+        from services.xp import give_xp
+        await give_xp(callback.bot, payment["user_id"], "wallet_topup")
+    except Exception:
+        pass
+
+    # 📸 КАРТИНКА (как у Stars и ЮKassa)
+    photo = FSInputFile("media/notifications/notification_replenishment_wallet.png")
+
+    await callback.bot.send_photo(
+        chat_id=payment["user_id"],
+        photo=photo,
+        caption=(
+            f"✅ <b>Кошелёк пополнен!</b>\n\n"
+            f"🪙 USDT: <b>{payment['original_amount']}</b>\n"
+            f"💰 Зачислено: <b>{payment['amount_rub']:.2f} ₽</b>"
+        ),
+        parse_mode="HTML"
+    )
+
+    # ❌ убираем старое сообщение
+    await callback.message.edit_text("✅ Оплата успешно подтверждена!")
 
 
 # ===========================
