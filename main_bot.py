@@ -1,5 +1,6 @@
 """
-main.py
+main.py  —  добавлен group_chat router
+ИЗМЕНЕНИЯ: добавлен from handlers import group_chat и dp.include_router(group_chat.router)
 """
 
 import asyncio
@@ -16,6 +17,7 @@ from dotenv import load_dotenv
 
 from handlers import user, admin, registration, profile
 from handlers import schedule, lectures, attendance, billing
+from handlers import group_chat                        # ← НОВЫЙ
 from services import pomodoro
 
 from middlewares.subscription_check import SubscriptionMiddleware
@@ -33,16 +35,13 @@ WEBHOOK_PORT = int(os.getenv("PORT", 8080))
 if not TOKEN:
     raise ValueError("❌ TOKEN не найден в .env")
 
-# Проверяем ADMIN_IDS
 _admin_ids_raw = os.getenv("ADMIN_IDS", "")
 if not _admin_ids_raw:
-    raise ValueError("❌ ADMIN_IDS не найден в .env. Добавьте: ADMIN_IDS=808603029,1991833177,1114949712")
+    raise ValueError("❌ ADMIN_IDS не найден в .env")
 
 if PROXY:
-    print(f"🌐 Использую прокси: {PROXY}")
     session = AiohttpSession(proxy=PROXY)
 else:
-    print("🌐 Запуск без прокси")
     session = AiohttpSession()
 
 bot = Bot(
@@ -67,29 +66,27 @@ async def set_commands(bot: Bot):
 async def main():
     logging.basicConfig(level=logging.INFO)
 
-    # ⚠️ Порядок роутеров важен — registration должен быть первым
+    # ⚠️ Порядок важен — registration первым, group_chat последним
     dp.include_router(registration.router)
     dp.include_router(profile.router)
     dp.include_router(admin.router)
     dp.include_router(billing.router)
     dp.include_router(schedule.router)
     dp.include_router(lectures.router)
-    dp.include_router(attendance.router)
+    dp.include_router(attendance.router)   # attendance до group_chat!
     dp.include_router(help_handler.router)
     dp.include_router(music.router)
     dp.include_router(stats_handler.router)
     dp.include_router(user.router)
     dp.include_router(pomodoro.router)
     dp.include_router(todo.router)
+    dp.include_router(group_chat.router)   # ← ПОСЛЕДНИМ чтобы не перехватывал команды
 
-    # Middleware проверки подписки
-    # dp.update.middleware(SubscriptionMiddleware()) # старое
     dp.message.middleware(SubscriptionMiddleware())
     dp.callback_query.middleware(SubscriptionMiddleware())
 
     await set_commands(bot)
 
-    # aiohttp-сервер для вебхука ЮKassa
     app = web.Application()
     app["bot"] = bot
     app.router.add_post("/yookassa/webhook", yookassa_webhook)
@@ -103,7 +100,7 @@ async def main():
     admin_ids = os.getenv("ADMIN_IDS", "")
     print(f"✅ aiohttp запущен на порту {WEBHOOK_PORT}")
     print(f"✅ Бот запущен!")
-    print(f"✅ MongoDB подключена!")
+    print(f"✅ Групповой чат: включён")
     print(f"✅ Админы: {admin_ids}")
 
     try:

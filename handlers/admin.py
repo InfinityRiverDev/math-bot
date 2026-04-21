@@ -931,3 +931,119 @@ async def broadcast_by_id_send(message: Message, state: FSMContext, bot: Bot):
 @router.callback_query(F.data == "noop")
 async def noop_handler(callback: CallbackQuery):
     await callback.answer()
+
+
+"""
+ДОПОЛНЕНИЕ К handlers/admin.py
+Вставьте этот код В КОНЕЦ файла handlers/admin.py
+"""
+
+# ===========================
+# Групповой чат — управление
+# ===========================
+
+from handlers.group_chat import set_group_chat_enabled, is_group_chat_enabled, group_settings, get_group_laziness
+
+
+@router.callback_query(F.data == "admin_group_chat", F.from_user.id.in_(ADMIN_IDS))
+async def admin_group_chat_menu(callback: CallbackQuery):
+    """Меню управления групповым чатом."""
+    await callback.answer()
+
+    # Получаем список всех групп
+    groups = []
+    async for doc in group_settings.find({}):
+        groups.append(doc)
+
+    text = "🤖 <b>Групповой ИИ-чат</b>\n\n"
+    if not groups:
+        text += "Бот ещё не добавлен ни в одну группу.\n\nДобавьте бота в группу — настройки появятся здесь."
+    else:
+        for g in groups:
+            status = "✅ Включён" if g.get("enabled") else "❌ Выключен"
+            laziness = g.get("laziness", 60)
+            text += f"• Chat <code>{g['chat_id']}</code> — {status} (лень: {laziness}%)\n"
+
+    buttons = []
+    for g in groups:
+        enabled = g.get("enabled", False)
+        chat_id = g["chat_id"]
+        buttons.append([
+            InlineKeyboardButton(
+                text=f"{'🔴 Выкл' if enabled else '🟢 Вкл'} ({chat_id})",
+                callback_data=f"group_chat_toggle_{chat_id}"
+            )
+        ])
+    buttons.append([InlineKeyboardButton(text="⬅️ Назад", callback_data="admin_main")])
+
+    await callback.message.edit_text(
+        text,
+        reply_markup=InlineKeyboardMarkup(inline_keyboard=buttons),
+        parse_mode='HTML'
+    )
+
+
+@router.callback_query(F.data.startswith("group_chat_toggle_"), F.from_user.id.in_(ADMIN_IDS))
+async def admin_group_chat_toggle(callback: CallbackQuery):
+    chat_id = int(callback.data.replace("group_chat_toggle_", ""))
+    currently = await is_group_chat_enabled(chat_id)
+    new_state  = not currently
+    await set_group_chat_enabled(chat_id, new_state)
+    state_text = "✅ включён" if new_state else "❌ выключен"
+    await callback.answer(f"Групповой чат {state_text}")
+    # Обновляем меню
+    await admin_group_chat_menu(callback)
+
+
+# ===========================
+# Статистика (полная)
+# ===========================
+
+@router.callback_query(F.data == "admin_statistics", F.from_user.id.in_(ADMIN_IDS))
+async def admin_statistics_menu(callback: CallbackQuery):
+    await callback.answer()
+    from database.stats_models import stats_users, stats_finance
+    from database.billing_models import payments
+
+    u = await stats_users()
+    f = await stats_finance()
+
+    # Разбивка по типам оплаты
+    pay_by_type = {"rub": 0, "stars": 0, "crypto": 0}
+    async for p in payments.find({"status": "succeeded"}):
+        t = p.get("type", p.get("currency", "rub"))
+        amt = p.get("amount_rub", p.get("amount", 0))
+        if "XTR" in str(t) or "stars" in str(t).lower():
+            pay_by_type["stars"] += amt
+        elif "USDT" in str(t) or "crypto" in str(t).lower():
+            pay_by_type["crypto"] += amt
+        else:
+            pay_by_type["rub"] += amt
+
+    text = (
+        "📊 <b>Статистика бота</b>\n\n"
+        f"<b>👥 Пользователи:</b>\n"
+        f"• Всего: <code>{u['total']}</code>\n"
+        f"• С подпиской: <code>{u['with_sub']}</code>\n"
+        f"• Без подписки: <code>{u['no_sub']}</code>\n"
+        f"• Новых сегодня: <code>{u['new_today']}</code>\n"
+        f"• Новых за неделю: <code>{u['new_week']}</code>\n"
+        f"• Новых за месяц: <code>{u['new_month']}</code>\n\n"
+        f"<b>💰 Финансы:</b>\n"
+        f"• Всего: <code>{f['total_revenue']:.0f}₽</code>\n"
+        f"• За месяц: <code>{f['month_revenue']:.0f}₽</code>\n"
+        f"• Сегодня: <code>{f['today_revenue']:.0f}₽</code>\n"
+        f"• Платежей всего: <code>{f['payment_count']}</code>\n\n"
+        f"<b>💳 По способу оплаты:</b>\n"
+        f"• 💳 Рублями (ЮКасса): <code>{pay_by_type['rub']:.0f}₽</code>\n"
+        f"• ⭐ Stars: <code>{pay_by_type['stars']:.0f}₽</code>\n"
+        f"• ₮ Крипто: <code>{pay_by_type['crypto']:.0f}₽</code>"
+    )
+
+    kb = InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton(text="🏆 Топ XP", callback_data="stats_top_xp"),
+         InlineKeyboardButton(text="📊 Активность", callback_data="stats_activity")],
+        [InlineKeyboardButton(text="⬅️ Назад", callback_data="admin_main")],
+    ])
+
+    await callback.message.edit_text(text, reply_markup=kb, parse_mode='HTML')

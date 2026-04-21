@@ -179,5 +179,6 @@ admin_panel = InlineKeyboardMarkup(inline_keyboard=[
     [InlineKeyboardButton(text="🚫 Баны",                callback_data="admin_bans")],
     [InlineKeyboardButton(text="💰 Чистая прибыль",      callback_data="admin_profit")],
     [InlineKeyboardButton(text="⚠️ Самоликвидация!!! ⚠️", callback_data="self_destruction")],
-    [InlineKeyboardButton(text="⬅️ Назад",               callback_data="back_to_main")]
+    [InlineKeyboardButton(text="⬅️ Назад",               callback_data="back_to_main")],
+    [InlineKeyboardButton(text="🤖 Групповой чат", callback_data="admin_group_chat")],
 ])
