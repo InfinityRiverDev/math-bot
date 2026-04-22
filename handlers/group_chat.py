@@ -17,6 +17,7 @@ from database.mongo import db
 
 logger = logging.getLogger(__name__)
 router = Router()
+router.message.filter(F.chat.type.in_({"group", "supergroup"}))
 group_settings = db["group_chat_settings"]
 
 ADMIN_IDS_RAW = os.getenv("ADMIN_IDS", "")
@@ -61,7 +62,8 @@ async def register_group(chat_id: int, title: str = ""):
 
 # ── Регистрация при добавлении бота ──────────────────────────────
 
-@router.chat_member()
+# ✅ my_chat_member — срабатывает когда бота добавляют/удаляют
+@router.my_chat_member()
 async def on_bot_status_change(event: ChatMemberUpdated, bot: Bot):
     """Регистрируем группу когда бота добавляют."""
     try:
@@ -70,19 +72,16 @@ async def on_bot_status_change(event: ChatMemberUpdated, bot: Bot):
         if (new_status in ("member", "administrator")
                 and chat.type in ("group", "supergroup")):
             await register_group(chat.id, chat.title or "")
+            logger.info(f"[GROUP CHAT] Auto-registered: {chat.id} ({chat.title})")
     except Exception as e:
-        logger.error(f"[GROUP CHAT] chat_member error: {e}")
+        logger.error(f"[GROUP CHAT] my_chat_member error: {e}")
 
-
-# ── Ручная регистрация командой /reg_group ────────────────────────
 
 @router.message(Command("reg_group"), F.chat.type.in_({"group", "supergroup"}))
 async def cmd_reg_group(message: Message):
-    """
-    Команда /reg_group в группе — вручную регистрирует группу.
-    Только для бот-админов.
-    """
     if message.from_user.id not in BOT_ADMIN_IDS:
+        # ✅ Теперь отвечаем вместо тихого игнора — для диагностики
+        await message.reply(f"⛔ Нет доступа. Ваш ID: {message.from_user.id}")
         return
     await register_group(message.chat.id, message.chat.title or "")
     await message.reply(
@@ -91,6 +90,7 @@ async def cmd_reg_group(message: Message):
         parse_mode="HTML"
     )
 
+# ── Ручная регистрация командой /reg_group ────────────────────────
 
 # ── ИИ запрос ─────────────────────────────────────────────────────
 
@@ -135,7 +135,7 @@ def _add(chat_id, role, content):
 
 # ── Обработчик сообщений ──────────────────────────────────────────
 
-@router.message(F.chat.type.in_({"group", "supergroup"}), F.text)
+@router.message(F.text)
 async def group_message_handler(message: Message, bot: Bot):
     # Пропускаем ссылки посещаемости
     if "one.kstu.ru/check-code/" in (message.text or ""):

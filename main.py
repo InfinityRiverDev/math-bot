@@ -92,7 +92,7 @@ async def main():
     print(f"✅ Админы: {os.getenv('ADMIN_IDS')}")
 
     try:
-        await dp.start_polling(bot, allowed_updates=dp.resolve_used_update_types())
+        await dp.start_polling(bot, allowed_updates=["message", "callback_query", "my_chat_member", "chat_member"])
     finally:
         await runner.cleanup()
         await bot.session.close()
