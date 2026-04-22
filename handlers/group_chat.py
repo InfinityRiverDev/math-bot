@@ -1,88 +1,108 @@
 """
 handlers/group_chat.py  —  ИИ-общение в группах.
 
-Включать в main.py СТРОГО ПОСЛЕ attendance.router
-Бот НЕ отвечает если:
-  - режим выключен для этой группы (по умолчанию ВЫКЛЮЧЕН)
-  - сообщение содержит ссылку посещаемости one.kstu.ru
-  - сообщение начинается с / (команда)
-  - сообщение от другого бота
+ВАЖНО: включать в main.py ПОСЛЕ attendance.router, ПОСЛЕДНИМ.
+
+Управление:
+  - Включить/выключить: кнопка "🤖 Групповой чат" в admin_panel
+  - Зарегистрировать группу вручную: команда /reg_group в нужной группе
+    (только для админов бота)
 """
 import os, random, asyncio, aiohttp, logging
 from datetime import datetime
 from aiogram import Router, Bot, F
-from aiogram.types import Message
+from aiogram.filters import Command
+from aiogram.types import Message, ChatMemberUpdated
 from database.mongo import db
 
 logger = logging.getLogger(__name__)
 router = Router()
 group_settings = db["group_chat_settings"]
 
+ADMIN_IDS_RAW = os.getenv("ADMIN_IDS", "")
+try:
+    BOT_ADMIN_IDS = set(map(int, ADMIN_IDS_RAW.split(",")))
+except Exception:
+    BOT_ADMIN_IDS = set()
+
+
+# ── Вспомогательные функции ───────────────────────────────────────
 
 async def is_group_chat_enabled(chat_id: int) -> bool:
     doc = await group_settings.find_one({"chat_id": chat_id})
-    return doc.get("enabled", False) if doc else False
-
+    return bool(doc.get("enabled", False)) if doc else False
 
 async def set_group_chat_enabled(chat_id: int, enabled: bool):
     await group_settings.update_one(
         {"chat_id": chat_id},
-        {"$set": {
-            "chat_id":    chat_id,
-            "enabled":    enabled,
-            "updated_at": datetime.now().isoformat()
-        }},
+        {"$set": {"chat_id": chat_id, "enabled": enabled, "updated_at": datetime.now().isoformat()}},
         upsert=True
     )
 
-
 async def get_group_laziness(chat_id: int) -> int:
-    """Лень 0–100. При лени=60 бот отвечает с вероятностью ~40%."""
     doc = await group_settings.find_one({"chat_id": chat_id})
-    return doc.get("laziness", 60) if doc else 60
+    return int(doc.get("laziness", 60)) if doc else 60
+
+async def register_group(chat_id: int, title: str = ""):
+    """Регистрирует группу в БД (если ещё нет)."""
+    await group_settings.update_one(
+        {"chat_id": chat_id},
+        {"$setOnInsert": {
+            "chat_id":    chat_id,
+            "chat_title": title,
+            "enabled":    False,  # выключен по умолчанию
+            "laziness":   60,
+            "added_at":   datetime.now().isoformat(),
+        }},
+        upsert=True
+    )
+    logger.info(f"[GROUP CHAT] Registered group {chat_id} ({title})")
 
 
-@router.my_chat_member()
-async def on_bot_added(event, bot: Bot):
-    """При добавлении бота в группу — создаём запись (выключен по умолчанию)."""
+# ── Регистрация при добавлении бота ──────────────────────────────
+
+@router.chat_member()
+async def on_bot_status_change(event: ChatMemberUpdated, bot: Bot):
+    """Регистрируем группу когда бота добавляют."""
     try:
-        if (event.new_chat_member.status in ("member", "administrator")
-                and event.chat.type in ("group", "supergroup")):
-            await group_settings.update_one(
-                {"chat_id": event.chat.id},
-                {"$setOnInsert": {
-                    "chat_id":    event.chat.id,
-                    "chat_title": event.chat.title or "",
-                    "enabled":    False,   # по умолчанию выключен!
-                    "laziness":   60,
-                    "added_at":   datetime.now().isoformat(),
-                }},
-                upsert=True
-            )
-            logger.info(f"[GROUP] Добавлен в {event.chat.id} ({event.chat.title}) — режим ВЫКЛЮЧЕН")
+        new_status = event.new_chat_member.status
+        chat       = event.chat
+        if (new_status in ("member", "administrator")
+                and chat.type in ("group", "supergroup")):
+            await register_group(chat.id, chat.title or "")
     except Exception as e:
-        logger.error(f"[GROUP] my_chat_member error: {e}")
+        logger.error(f"[GROUP CHAT] chat_member error: {e}")
 
+
+# ── Ручная регистрация командой /reg_group ────────────────────────
+
+@router.message(Command("reg_group"), F.chat.type.in_({"group", "supergroup"}))
+async def cmd_reg_group(message: Message):
+    """
+    Команда /reg_group в группе — вручную регистрирует группу.
+    Только для бот-админов.
+    """
+    if message.from_user.id not in BOT_ADMIN_IDS:
+        return
+    await register_group(message.chat.id, message.chat.title or "")
+    await message.reply(
+        f"✅ Группа <b>{message.chat.title}</b> зарегистрирована!\n\n"
+        f"Включить ИИ-чат: кнопка <b>🤖 Групповой чат</b> в Telegram-боте → Админ-панель.",
+        parse_mode="HTML"
+    )
+
+
+# ── ИИ запрос ─────────────────────────────────────────────────────
 
 YANDEX_API_KEY   = os.getenv("YANDEX_API_KEY")
 YANDEX_FOLDER_ID = os.getenv("YANDEX_FOLDER_ID")
 
 SYSTEM = (
-    "Ты — дружелюбный ИИ-помощник в студенческой группе. Имя — Math Tutor Bot.\n"
-    "Отвечай кратко (2–4 предложения), неформально, без LaTeX и HTML.\n"
-    "Отвечай на языке собеседника."
+    "Ты — дружелюбный ИИ-помощник в студенческой группе. Имя — Math Tutor Bot. "
+    "Правила: отвечай кратко (2-4 предложения), неформально, без LaTeX и HTML. "
+    "Отвечай на языке собеседника (русский или английский). "
+    "Если вопрос про математику — помогай. Если болтают — поддержи разговор."
 )
-
-_cache: dict[int, list] = {}
-
-
-def _add_ctx(chat_id: int, role: str, content: str):
-    if chat_id not in _cache:
-        _cache[chat_id] = []
-    _cache[chat_id].append({"role": role, "content": content})
-    if len(_cache[chat_id]) > 20:
-        _cache[chat_id] = _cache[chat_id][-20:]
-
 
 async def _ask_ai(text: str, ctx: list) -> str | None:
     msgs = [{"role": "system", "content": SYSTEM}]
@@ -92,16 +112,9 @@ async def _ask_ai(text: str, ctx: list) -> str | None:
         async with aiohttp.ClientSession() as s:
             async with s.post(
                 "https://llm.api.cloud.yandex.net/v1/chat/completions",
-                headers={
-                    "Authorization": f"Api-Key {YANDEX_API_KEY}",
-                    "Content-Type":  "application/json",
-                },
-                json={
-                    "model":       f"gpt://{YANDEX_FOLDER_ID}/gemma-3-27b-it/latest",
-                    "messages":    msgs,
-                    "temperature": 0.7,
-                    "max_tokens":  300,
-                }
+                headers={"Authorization": f"Api-Key {YANDEX_API_KEY}", "Content-Type": "application/json"},
+                json={"model": f"gpt://{YANDEX_FOLDER_ID}/gemma-3-27b-it/latest",
+                      "messages": msgs, "temperature": 0.7, "max_tokens": 300}
             ) as r:
                 d = await r.json()
                 return d["choices"][0]["message"]["content"].strip()
@@ -109,59 +122,69 @@ async def _ask_ai(text: str, ctx: list) -> str | None:
         logger.error(f"[GROUP AI] {e}")
         return None
 
+# История сообщений в памяти
+_history: dict[int, list] = {}
+
+def _add(chat_id, role, content):
+    if chat_id not in _history:
+        _history[chat_id] = []
+    _history[chat_id].append({"role": role, "content": content})
+    if len(_history[chat_id]) > 20:
+        _history[chat_id] = _history[chat_id][-20:]
+
+
+# ── Обработчик сообщений ──────────────────────────────────────────
 
 @router.message(F.chat.type.in_({"group", "supergroup"}), F.text)
 async def group_message_handler(message: Message, bot: Bot):
-    text = message.text or ""
-
-    # Строго игнорируем:
-    if "one.kstu.ru/check-code/" in text:  # attendance обработает
-        return
-    if text.startswith("/"):               # команды боту
-        return
-    if message.from_user and message.from_user.is_bot:  # другие боты
+    # Пропускаем ссылки посещаемости
+    if "one.kstu.ru/check-code/" in (message.text or ""):
         return
 
-    # Проверяем включён ли режим
-    if not await is_group_chat_enabled(message.chat.id):
+    # Пропускаем команды
+    if (message.text or "").startswith("/"):
         return
 
-    bot_info     = await bot.get_me()
+    chat_id = message.chat.id
+
+    # Если группа не зарегистрирована — регистрируем автоматически
+    doc = await group_settings.find_one({"chat_id": chat_id})
+    if not doc:
+        await register_group(chat_id, message.chat.title or "")
+        return  # первый раз просто регистрируем, не отвечаем
+
+    if not doc.get("enabled", False):
+        return
+
+    bot_info = await bot.get_me()
+    text = message.text.strip()
     should_reply = False
-    reply_text   = text
 
-    # 1. Прямое упоминание @бота
-    if f"@{bot_info.username}" in text:
+    # Упоминание @бота
+    if bot_info.username and f"@{bot_info.username}" in text:
         should_reply = True
-        reply_text   = text.replace(f"@{bot_info.username}", "").strip()
-
-    # 2. Реплай на сообщение бота
-    elif (
-        message.reply_to_message
-        and message.reply_to_message.from_user
-        and message.reply_to_message.from_user.id == bot_info.id
-    ):
+        text = text.replace(f"@{bot_info.username}", "").strip()
+    # Реплай на сообщение бота
+    elif (message.reply_to_message
+          and message.reply_to_message.from_user
+          and message.reply_to_message.from_user.id == bot_info.id):
         should_reply = True
-
-    # 3. Случайный ответ по вероятности
+    # Случайный ответ
     else:
-        laziness = await get_group_laziness(message.chat.id)
-        prob = max(0, 100 - laziness) / 100
-        if random.random() < prob:
+        laziness = doc.get("laziness", 60)
+        if random.random() < max(0, 100 - laziness) / 100:
             should_reply = True
 
-    name = message.from_user.first_name if message.from_user else "User"
-    _add_ctx(message.chat.id, "user", f"{name}: {reply_text}")
+    name = message.from_user.first_name or "User"
+    _add(chat_id, "user", f"{name}: {text}")
 
     if not should_reply:
         return
 
-    ctx = _cache.get(message.chat.id, [])[:-1]
-
+    ctx = _history.get(chat_id, [])[:-1]
     await asyncio.sleep(random.uniform(0.5, 1.5))
-    answer = await _ask_ai(reply_text, ctx)
+    answer = await _ask_ai(text, ctx)
     if not answer:
         return
-
-    _add_ctx(message.chat.id, "assistant", answer)
+    _add(chat_id, "assistant", answer)
     await message.reply(answer)
