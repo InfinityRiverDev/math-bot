@@ -199,3 +199,46 @@ admin_panel = InlineKeyboardMarkup(inline_keyboard=[
     [InlineKeyboardButton(text="⚠️ Самоликвидация!!! ⚠️", callback_data="self_destruction")],
     [InlineKeyboardButton(text="⬅️ Назад",               callback_data="back_to_main")]
 ])
+
+# =========================
+# 🤖 Групповой чат (админ)
+# =========================
+def get_group_chat_kb(groups: list) -> InlineKeyboardMarkup:
+    """Список групп с кнопками управления."""
+    buttons = []
+    for g in groups:
+        status = "✅" if g.get("enabled") else "❌"
+        title = g.get("chat_title") or str(g["chat_id"])
+        buttons.append([
+            InlineKeyboardButton(
+                text=f"{status} {title}",
+                callback_data=f"gc_toggle_{g['chat_id']}"
+            )
+        ])
+        # Кнопка лени для каждой группы
+        laziness = g.get("laziness", 60)
+        buttons.append([
+            InlineKeyboardButton(text=f"🦥 Лень: {laziness}%", callback_data=f"gc_lazy_{g['chat_id']}"),
+        ])
+    buttons.append([InlineKeyboardButton(text="⬅️ Назад", callback_data="admin_main")])
+    return InlineKeyboardMarkup(inline_keyboard=buttons)
+
+
+def get_laziness_kb(chat_id: int, current: int) -> InlineKeyboardMarkup:
+    """Клавиатура выбора значения лени."""
+    levels = [0, 20, 40, 60, 80, 95]
+    buttons = []
+    row = []
+    for val in levels:
+        mark = "✅ " if val == current else ""
+        row.append(InlineKeyboardButton(
+            text=f"{mark}{val}%",
+            callback_data=f"gc_setlazy_{chat_id}_{val}"
+        ))
+        if len(row) == 3:
+            buttons.append(row)
+            row = []
+    if row:
+        buttons.append(row)
+    buttons.append([InlineKeyboardButton(text="⬅️ Назад", callback_data="admin_group_chat")])
+    return InlineKeyboardMarkup(inline_keyboard=buttons)

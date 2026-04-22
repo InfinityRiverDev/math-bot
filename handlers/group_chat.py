@@ -171,7 +171,7 @@ async def group_message_handler(message: Message, bot: Bot):
         should_reply = True
     # Случайный ответ
     else:
-        laziness = doc.get("laziness", 5)
+        laziness = doc.get("laziness", 60)
         if random.random() < max(0, 100 - laziness) / 100:
             should_reply = True
 

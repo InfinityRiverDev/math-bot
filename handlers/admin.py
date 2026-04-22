@@ -944,12 +944,11 @@ from handlers.group_chat import set_group_chat_enabled, is_group_chat_enabled, g
 @router.callback_query(F.data == "admin_group_chat", F.from_user.id.in_(ADMIN_IDS))
 async def admin_group_chat_menu(callback: CallbackQuery):
     await callback.answer()
- 
-    # Получаем все зарегистрированные группы
+
     groups = []
     async for doc in group_settings.find({}):
         groups.append(doc)
- 
+
     text = "🤖 <b>Групповой ИИ-чат</b>\n\n"
     if not groups:
         text += (
@@ -960,30 +959,36 @@ async def admin_group_chat_menu(callback: CallbackQuery):
             "<i>После регистрации группа появится здесь.</i>"
         )
     else:
-        text += f"Зарегистрировано групп: <b>{len(groups)}</b>\n\n"
+        text += "✅ — вкл  |  ❌ — выкл  |  🦥 — настроить лень\n\n"
         for g in groups:
             st    = "✅ Вкл" if g.get("enabled") else "❌ Выкл"
             title = g.get("chat_title") or str(g["chat_id"])
             laz   = g.get("laziness", 60)
-            text += f"• <b>{title}</b>\n  {st} · Лень: {laz}%\n\n"
- 
+            text += f"• <b>{title}</b>  {st} · Лень: {laz}%\n"
+
     buttons = []
     for g in groups:
         title   = (g.get("chat_title") or str(g["chat_id"]))[:22]
         enabled = g.get("enabled", False)
+        laz     = g.get("laziness", 60)
         cid     = g["chat_id"]
-        buttons.append([InlineKeyboardButton(
-            text=f"{'🔴 Выкл' if enabled else '🟢 Вкл'} — {title}",
-            callback_data=f"gc_toggle_{cid}"
-        )])
- 
+        buttons.append([
+            InlineKeyboardButton(
+                text=f"{'🔴 Выкл' if enabled else '🟢 Вкл'} {title}",
+                callback_data=f"gc_toggle_{cid}"
+            ),
+            InlineKeyboardButton(
+                text=f"🦥 {laz}%",
+                callback_data=f"gc_lazy_{cid}"
+            )
+        ])
+
     buttons.append([InlineKeyboardButton(text="⬅️ Назад", callback_data="admin_main")])
     await callback.message.edit_text(
         text,
         reply_markup=InlineKeyboardMarkup(inline_keyboard=buttons),
         parse_mode='HTML'
     )
- 
  
 @router.callback_query(F.data.startswith("gc_toggle_"), F.from_user.id.in_(ADMIN_IDS))
 async def admin_gc_toggle(callback: CallbackQuery):
@@ -993,7 +998,84 @@ async def admin_gc_toggle(callback: CallbackQuery):
     await set_group_chat_enabled(chat_id, new)
     await callback.answer(f"{'✅ Включён' if new else '❌ Выключен'}")
     await admin_group_chat_menu(callback)
- 
+
+@router.callback_query(F.data.startswith("gc_lazy_"), F.from_user.id.in_(ADMIN_IDS))
+async def admin_gc_lazy_menu(callback: CallbackQuery):
+    chat_id = int(callback.data.replace("gc_lazy_", ""))
+    doc = await group_settings.find_one({"chat_id": chat_id})
+    current = doc.get("laziness", 60)
+    title = doc.get("chat_title") or str(chat_id)
+
+    levels = [0, 20, 40, 60, 80, 95]
+    rows = []
+    row = []
+    for val in levels:
+        mark = "✅ " if val == current else ""
+        row.append(InlineKeyboardButton(
+            text=f"{mark}{val}%",
+            callback_data=f"gc_setlazy_{chat_id}_{val}"
+        ))
+        if len(row) == 3:
+            rows.append(row)
+            row = []
+    if row:
+        rows.append(row)
+    rows.append([InlineKeyboardButton(text="⬅️ Назад", callback_data="admin_group_chat")])
+
+    await callback.message.edit_text(
+        f"🦥 <b>Лень для «{title}»</b>\n\n"
+        f"Текущее значение: <b>{current}%</b>\n\n"
+        "0% → отвечает на каждое сообщение\n"
+        "60% → примерно каждое 3-е\n"
+        "95% → почти молчит, только @упоминания",
+        reply_markup=InlineKeyboardMarkup(inline_keyboard=rows),
+        parse_mode='HTML'
+    )
+    await callback.answer()
+
+
+@router.callback_query(F.data.startswith("gc_setlazy_"), F.from_user.id.in_(ADMIN_IDS))
+async def admin_gc_set_laziness(callback: CallbackQuery):
+    # gc_setlazy_CHATID_VALUE
+    parts   = callback.data.split("_")
+    chat_id = int(parts[2])
+    value   = int(parts[3])
+
+    await group_settings.update_one(
+        {"chat_id": chat_id},
+        {"$set": {"laziness": value}}
+    )
+    await callback.answer(f"✅ Лень: {value}%")
+
+    # Возвращаемся в меню лени с обновлённым значением
+    doc   = await group_settings.find_one({"chat_id": chat_id})
+    title = doc.get("chat_title") or str(chat_id)
+
+    levels = [0, 20, 40, 60, 80, 95]
+    rows = []
+    row = []
+    for val in levels:
+        mark = "✅ " if val == value else ""
+        row.append(InlineKeyboardButton(
+            text=f"{mark}{val}%",
+            callback_data=f"gc_setlazy_{chat_id}_{val}"
+        ))
+        if len(row) == 3:
+            rows.append(row)
+            row = []
+    if row:
+        rows.append(row)
+    rows.append([InlineKeyboardButton(text="⬅️ Назад", callback_data="admin_group_chat")])
+
+    await callback.message.edit_text(
+        f"🦥 <b>Лень для «{title}»</b>\n\n"
+        f"Текущее значение: <b>{value}%</b>\n\n"
+        "0% → отвечает на каждое сообщение\n"
+        "60% → примерно каждое 3-е\n"
+        "95% → почти молчит, только @упоминания",
+        reply_markup=InlineKeyboardMarkup(inline_keyboard=rows),
+        parse_mode='HTML'
+    )
  
 # ============================================================
 # Статистика с разбивкой по типам оплаты
