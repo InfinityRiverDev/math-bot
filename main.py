@@ -1,6 +1,9 @@
 """
-main.py  —  бот Math Tutor
-ИЗМЕНЕНИЯ: добавлен group_chat.router (включать ПОСЛЕДНИМ)
+main.py — Math Tutor Bot
+ИСПРАВЛЕНИЯ:
+- delete_webhook перед polling → убирает TelegramConflictError
+- group_chat.router последним
+- drop_pending_updates=True
 """
 import asyncio, logging, os
 from aiogram import Bot, Dispatcher
@@ -13,7 +16,7 @@ from dotenv import load_dotenv
 
 from handlers import user, admin, registration, profile
 from handlers import schedule, lectures, attendance, billing
-from handlers import group_chat                 # ← НОВЫЙ
+from handlers import group_chat
 from services import pomodoro
 from middlewares.subscription_check import SubscriptionMiddleware
 from handlers.billing import yookassa_webhook
@@ -33,13 +36,8 @@ if not os.getenv("ADMIN_IDS"):
     raise ValueError("ADMIN_IDS не найден в .env")
 
 session = AiohttpSession(proxy=PROXY) if PROXY else AiohttpSession()
-
-bot = Bot(
-    token=TOKEN,
-    default=DefaultBotProperties(parse_mode=ParseMode.HTML),
-    session=session
-)
-dp = Dispatcher()
+bot = Bot(token=TOKEN, default=DefaultBotProperties(parse_mode=ParseMode.HTML), session=session)
+dp  = Dispatcher()
 
 
 async def set_commands(bot: Bot):
@@ -54,24 +52,26 @@ async def set_commands(bot: Bot):
 async def main():
     logging.basicConfig(level=logging.INFO)
 
-    # ПОРЯДОК ВАЖЕН:
-    # 1. registration — первым (перехватывает /start для новых)
-    # 2. attendance — до group_chat (обрабатывает ссылки посещаемости в группах)
-    # 3. group_chat — последним (не перехватывает команды)
+    # ✅ КРИТИЧНО: удаляем вебхук ПЕРЕД polling
+    # Это убирает TelegramConflictError если вебхук был установлен
+    await bot.delete_webhook(drop_pending_updates=True)
+    logging.info("Webhook deleted, starting polling...")
+
+    # Порядок важен: attendance ДО group_chat, group_chat ПОСЛЕДНИМ
     dp.include_router(registration.router)
     dp.include_router(profile.router)
     dp.include_router(admin.router)
     dp.include_router(billing.router)
     dp.include_router(schedule.router)
     dp.include_router(lectures.router)
-    dp.include_router(attendance.router)      # ← до group_chat
+    dp.include_router(attendance.router)
     dp.include_router(help_handler.router)
     dp.include_router(music.router)
     dp.include_router(stats_handler.router)
     dp.include_router(user.router)
     dp.include_router(pomodoro.router)
     dp.include_router(todo.router)
-    dp.include_router(group_chat.router)      # ← последним
+    dp.include_router(group_chat.router)   # ПОСЛЕДНИМ
 
     dp.message.middleware(SubscriptionMiddleware())
     dp.callback_query.middleware(SubscriptionMiddleware())
@@ -88,11 +88,11 @@ async def main():
     await web.TCPSite(runner, host="0.0.0.0", port=WEBHOOK_PORT).start()
 
     print(f"✅ Бот запущен! Порт: {WEBHOOK_PORT}")
-    print(f"✅ Групповой чат: включён (управление через админ-панель)")
+    print(f"✅ Групповой чат: включается через админ-панель")
     print(f"✅ Админы: {os.getenv('ADMIN_IDS')}")
 
     try:
-        await dp.start_polling(bot)
+        await dp.start_polling(bot, allowed_updates=dp.resolve_used_update_types())
     finally:
         await runner.cleanup()
         await bot.session.close()

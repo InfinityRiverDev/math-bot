@@ -1,13 +1,20 @@
 """
 keyboards/user_kb.py
-
-Изменения:
-- Добавлена кнопка «💼 Кошелёк» в раздел «Личное»
-- Добавлена кнопка «💳 Подписка» в профиль
-- Обновлена admin_panel (тарифы, промокоды, рассылка)
+ИЗМЕНЕНИЯ:
+- Кнопки Desmos открывают миниапп на нужном разделе через WebAppInfo
+- Добавлена кнопка "🤖 Групповой чат" в admin_panel
 """
 
-from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
+import os
+from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton, WebAppInfo
+
+WEBAPP_URL = os.getenv("WEBAPP_URL", "https://math-tutor-webapp.vercel.app/")
+
+
+def _wa(path: str) -> WebAppInfo:
+    """Хелпер: создаёт WebAppInfo с нужным путём."""
+    url = WEBAPP_URL.rstrip("/") + path
+    return WebAppInfo(url=url)
 
 
 # =========================
@@ -28,14 +35,12 @@ def get_start_kb(is_admin: bool) -> InlineKeyboardMarkup:
         ]
     ]
     if is_admin:
-        buttons.append([
-            InlineKeyboardButton(text="⚙️ Админ-панель", callback_data="admin_main")
-        ])
+        buttons.append([InlineKeyboardButton(text="⚙️ Админ-панель", callback_data="admin_main")])
     return InlineKeyboardMarkup(inline_keyboard=buttons)
 
 
 # =========================
-# 🔒 Меню для неоплативших (только Личное + Услуги)
+# 🔒 Меню для неоплативших
 # =========================
 def get_locked_kb(is_admin: bool) -> InlineKeyboardMarkup:
     buttons = [
@@ -43,14 +48,10 @@ def get_locked_kb(is_admin: bool) -> InlineKeyboardMarkup:
             InlineKeyboardButton(text="📝 Услуги", callback_data="services"),
             InlineKeyboardButton(text="👤 Личное", callback_data="personal")
         ],
-        [
-            InlineKeyboardButton(text="💳 Купить доступ", callback_data="wallet_view")
-        ]
+        [InlineKeyboardButton(text="💳 Купить доступ", callback_data="wallet_view")]
     ]
     if is_admin:
-        buttons.append([
-            InlineKeyboardButton(text="⚙️ Админ-панель", callback_data="admin_main")
-        ])
+        buttons.append([InlineKeyboardButton(text="⚙️ Админ-панель", callback_data="admin_main")])
     return InlineKeyboardMarkup(inline_keyboard=buttons)
 
 
@@ -64,12 +65,28 @@ ai_tutor_menu = InlineKeyboardMarkup(inline_keyboard=[
     [InlineKeyboardButton(text="⬅️ Назад",          callback_data="back_to_main")]
 ])
 
+# Кнопки Desmos открывают миниапп на нужном разделе
 ai_additional_functions = InlineKeyboardMarkup(inline_keyboard=[
-    [InlineKeyboardButton(text="Графический калькулятор", callback_data="graphical_calculator")],
-    [InlineKeyboardButton(text="Научный калькулятор", callback_data="scientific_calculator")],
-    [InlineKeyboardButton(text="Арифметический калькулятор", callback_data="arithmetic_calculator")],
-    [InlineKeyboardButton(text="3D-калькулятор", callback_data="3D_calculator")],
-    [InlineKeyboardButton(text="Геометрические инструменты", callback_data="geometric_tools")],
+    [InlineKeyboardButton(
+        text="📈 Графический калькулятор",
+        web_app=WebAppInfo(url=WEBAPP_URL.rstrip("/") + "/?desmos=graphing")
+    )],
+    [InlineKeyboardButton(
+        text="🔬 Научный калькулятор",
+        web_app=WebAppInfo(url=WEBAPP_URL.rstrip("/") + "/?desmos=scientific")
+    )],
+    [InlineKeyboardButton(
+        text="🔢 Арифметический калькулятор",
+        web_app=WebAppInfo(url=WEBAPP_URL.rstrip("/") + "/?desmos=arithmetic")
+    )],
+    [InlineKeyboardButton(
+        text="🌐 3D-калькулятор",
+        web_app=WebAppInfo(url=WEBAPP_URL.rstrip("/") + "/?desmos=3d")
+    )],
+    [InlineKeyboardButton(
+        text="📐 Геометрические инструменты",
+        web_app=WebAppInfo(url=WEBAPP_URL.rstrip("/") + "/?desmos=geometry")
+    )],
     [InlineKeyboardButton(text="⬅️ Назад", callback_data="back_to_ai_tutor_menu")]
 ])
 
@@ -178,7 +195,7 @@ admin_panel = InlineKeyboardMarkup(inline_keyboard=[
     [InlineKeyboardButton(text="🔍 Поиск по ID",         callback_data="admin_find_user")],
     [InlineKeyboardButton(text="🚫 Баны",                callback_data="admin_bans")],
     [InlineKeyboardButton(text="💰 Чистая прибыль",      callback_data="admin_profit")],
+    [InlineKeyboardButton(text="🤖 Групповой чат",       callback_data="admin_group_chat")],  # ← НОВОЕ
     [InlineKeyboardButton(text="⚠️ Самоликвидация!!! ⚠️", callback_data="self_destruction")],
-    [InlineKeyboardButton(text="⬅️ Назад",               callback_data="back_to_main")],
-    [InlineKeyboardButton(text="🤖 Групповой чат", callback_data="admin_group_chat")],
+    [InlineKeyboardButton(text="⬅️ Назад",               callback_data="back_to_main")]
 ])
