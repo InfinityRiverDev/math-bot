@@ -105,6 +105,9 @@ SYSTEM = (
 )
 
 async def _ask_ai(text: str, ctx: list) -> str | None:
+    if not YANDEX_API_KEY or not YANDEX_FOLDER_ID:
+        logger.error(f"[GROUP AI] YANDEX_API_KEY или YANDEX_FOLDER_ID не заданы!")
+        return None
     msgs = [{"role": "system", "content": SYSTEM}]
     msgs.extend(ctx[-6:])
     msgs.append({"role": "user", "content": text})
@@ -117,9 +120,10 @@ async def _ask_ai(text: str, ctx: list) -> str | None:
                       "messages": msgs, "temperature": 0.7, "max_tokens": 300}
             ) as r:
                 d = await r.json()
+                logger.info(f"[GROUP AI] response status={r.status} body={str(d)[:200]}")
                 return d["choices"][0]["message"]["content"].strip()
     except Exception as e:
-        logger.error(f"[GROUP AI] {e}")
+        logger.error(f"[GROUP AI] Exception: {e}")
         return None
 
 # История сообщений в памяти
