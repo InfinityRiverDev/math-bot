@@ -4,6 +4,9 @@ middlewares/subscription_check.py
 Middleware — проверяет активную подписку.
 Без подписки доступны ТОЛЬКО: Услуги, Кошелёк, Профиль, Регистрация.
 Администраторы из ADMIN_IDS — всегда без ограничений.
+
+ИСПРАВЛЕНИЕ: сообщения из группчатов (group/supergroup) пропускаются без
+проверки подписки — ими занимается handlers/group_chat.py со своей логикой.
 """
 
 from typing import Callable, Dict, Any, Awaitable
@@ -13,13 +16,12 @@ from aiogram.types import TelegramObject, CallbackQuery, Message
 
 from database.billing_models import has_active_subscription
 from database.models import is_registered
-from database.models import is_banned, get_user_full
+from database.models import is_banned
 from handlers.admin import ADMIN_IDS
 
 
 # Callback-данные, разрешённые без подписки
 ALLOWED_CALLBACKS = {
-    # Навигация
     "back_to_main",
     "personal",
     "profile",
@@ -28,7 +30,6 @@ ALLOWED_CALLBACKS = {
     "profile_view",
     "profile_delete",
     "profile_delete_confirm",
-    # Услуги (доступны всем)
     "services",
     "backward_to_services",
     "print",
@@ -37,14 +38,12 @@ ALLOWED_CALLBACKS = {
     "presentation",
     "backward_to_presentation",
     "pr_1", "pr_2", "pr_3", "pr_4", "pr_5",
-    # Кошелёк и оплата — ВСЕГДА разрешены
     "wallet_view",
     "wallet_topup",
     "wallet_buy_plan",
     "wallet_withdraw",
-    # Заглушка
     "noop",
-    "trial_activate"
+    "trial_activate",
 }
 
 # Префиксы callback, разрешённые без подписки
@@ -60,7 +59,7 @@ ALLOWED_PREFIXES = (
 )
 
 # Команды, всегда разрешённые
-ALLOWED_COMMANDS = {"/start", "/cancel", "/help", "/wallet"}
+ALLOWED_COMMANDS = {"/start", "/cancel", "/help", "/wallet", "/reg_group"}
 
 LOCKED_MESSAGE = (
     "🔒 <b>Доступ ограничен</b>\n\n"
@@ -85,7 +84,15 @@ class SubscriptionMiddleware(BaseMiddleware):
         if user_id is None:
             return await handler(event, data)
 
-        # Администраторы — полный доступ без ограничений
+        # ✅ ГРУППОВЫЕ ЧАТЫ — пропускаем без проверки подписки.
+        # Группы обрабатывает handlers/group_chat.py со своей логикой вкл/выкл.
+        # Проверять подписку каждого участника группы — бессмысленно и вредно.
+        if isinstance(event, Message):
+            chat_type = getattr(event.chat, "type", "private")
+            if chat_type in ("group", "supergroup"):
+                return await handler(event, data)
+
+        # Администраторы — полный доступ
         if user_id in ADMIN_IDS:
             return await handler(event, data)
 
@@ -94,7 +101,7 @@ class SubscriptionMiddleware(BaseMiddleware):
         if not registered:
             return await handler(event, data)
 
-        # 🔴 БАН — САМЫЙ ВАЖНЫЙ БЛОК
+        # 🔴 Проверка бана
         if await is_banned(user_id):
             if isinstance(event, Message):
                 await event.answer("🚫 <b>Вы заблокированы</b>", parse_mode='HTML')
@@ -102,32 +109,16 @@ class SubscriptionMiddleware(BaseMiddleware):
                 await event.answer("🚫 Вы заблокированы", show_alert=True)
             return
 
-        # # 🔴 Проверка бана
-        # if await is_banned(user_id):
-        #     user = await get_user_full(user_id)
-        #     reason = user.get("ban_reason")
-        #
-        #     text = "🚫 <b>Вы заблокированы в боте</b>"
-        #
-        #     if reason:
-        #         text += f"\n\n📝 Причина: <i>{reason}</i>"
-        #
-        #     if isinstance(event, Message):
-        #         await event.answer(text, parse_mode='HTML')
-        #     elif isinstance(event, CallbackQuery):
-        #         await event.answer("🚫 Вы заблокированы", show_alert=True)
-        #
-        #     return
-
         # Проверка подписки
         has_sub = await has_active_subscription(user_id)
         if has_sub:
             return await handler(event, data)
+
         if isinstance(event, CallbackQuery):
             if event.data == "trial_activate":
                 return await handler(event, data)
 
-        # ─── Нет подписки ───
+        # ─── Нет подписки ───────────────────────────────────────────
 
         if isinstance(event, Message):
             text = (event.text or "").strip()
@@ -143,7 +134,7 @@ class SubscriptionMiddleware(BaseMiddleware):
                 if current:
                     return await handler(event, data)
 
-            # Блокируем всё остальное
+            # Блокируем
             await event.answer(LOCKED_MESSAGE, parse_mode='HTML')
             return
 
@@ -156,7 +147,6 @@ class SubscriptionMiddleware(BaseMiddleware):
             if any(cb_data.startswith(p) for p in ALLOWED_PREFIXES):
                 return await handler(event, data)
 
-            # Блокируем
             await event.answer(
                 "🔒 Нужна активная подписка.\n"
                 "Перейди: Кошелёк → Купить тариф",
@@ -167,10 +157,7 @@ class SubscriptionMiddleware(BaseMiddleware):
         return await handler(event, data)
 
 
-
-# =======================================================================================================
-### Функция, которую можно вставить в любом месте бота и при любом действии для проверки наличия подписки
-# =======================================================================================================
+# ─── Вспомогательная функция ─────────────────────────────────────
 
 async def check_sub(user_id, message):
     from database.billing_models import has_active_subscription
@@ -178,9 +165,3 @@ async def check_sub(user_id, message):
         await message.answer("❌ <b>Сначала оплатите подписку</b>", parse_mode='HTML')
         return False
     return True
-
-# Вставлять этот код в нужном месте:
-# if not await check_sub(message.from_user.id, message):
-#     return
-
-# =======================================================================================================
