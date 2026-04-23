@@ -1,9 +1,5 @@
 """
-main.py — Math Tutor Bot
-ИСПРАВЛЕНИЯ:
-- delete_webhook перед polling → убирает TelegramConflictError
-- group_chat.router последним
-- drop_pending_updates=True
+main.py — Math Tutor Bot (Webhook mode для Render)
 """
 import asyncio, logging, os
 from aiogram import Bot, Dispatcher
@@ -11,6 +7,7 @@ from aiogram.types import BotCommand, BotCommandScopeDefault
 from aiogram.client.default import DefaultBotProperties
 from aiogram.client.session.aiohttp import AiohttpSession
 from aiogram.enums import ParseMode
+from aiogram.webhook.aiohttp_server import SimpleRequestHandler, setup_application
 from aiohttp import web
 from dotenv import load_dotenv
 
@@ -29,6 +26,9 @@ load_dotenv()
 TOKEN        = os.getenv("TOKEN")
 PROXY        = os.getenv("PROXY")
 WEBHOOK_PORT = int(os.getenv("PORT", 8080))
+WEBHOOK_HOST = os.getenv("RENDER_EXTERNAL_URL", "")  # Render сам ставит эту переменную
+WEBHOOK_PATH = "/webhook"
+WEBHOOK_URL  = f"{WEBHOOK_HOST}{WEBHOOK_PATH}"
 
 if not TOKEN:
     raise ValueError("TOKEN не найден в .env")
@@ -49,20 +49,7 @@ async def set_commands(bot: Bot):
     ], scope=BotCommandScopeDefault())
 
 
-async def main():
-    logging.basicConfig(level=logging.INFO)
-
-    # ✅ КРИТИЧНО: удаляем вебхук ПЕРЕД polling
-    # Это убирает TelegramConflictError если вебхук был установлен
-    await bot.delete_webhook(drop_pending_updates=True)
-    await asyncio.sleep(3)
-    
-    # Проверяем что вебхук точно снят
-    webhook_info = await bot.get_webhook_info()
-    logging.info(f"Webhook URL: '{webhook_info.url}' (должен быть пустым)")
-    logging.info("Webhook deleted, starting polling...")
-
-    # Порядок важен: attendance ДО group_chat, group_chat ПОСЛЕДНИМ
+def setup_routers():
     dp.include_router(registration.router)
     dp.include_router(profile.router)
     dp.include_router(admin.router)
@@ -76,34 +63,57 @@ async def main():
     dp.include_router(user.router)
     dp.include_router(pomodoro.router)
     dp.include_router(todo.router)
-    dp.include_router(group_chat.router)   # ПОСЛЕДНИМ
+    dp.include_router(group_chat.router)  # ПОСЛЕДНИМ
 
     dp.message.middleware(SubscriptionMiddleware())
     dp.callback_query.middleware(SubscriptionMiddleware())
 
+
+async def on_startup(bot: Bot):
+    await bot.set_webhook(
+        url=WEBHOOK_URL,
+        allowed_updates=["message", "callback_query", "my_chat_member", "chat_member"]
+    )
     await set_commands(bot)
+    logging.info(f"✅ Webhook установлен: {WEBHOOK_URL}")
+
+
+async def on_shutdown(bot: Bot):
+    await bot.delete_webhook()
+    logging.info("Webhook удалён")
+
+
+async def main():
+    logging.basicConfig(level=logging.INFO)
+
+    setup_routers()
+
+    dp.startup.register(on_startup)
+    dp.shutdown.register(on_shutdown)
 
     app = web.Application()
     app["bot"] = bot
+
+    # Webhook для Telegram
+    SimpleRequestHandler(dispatcher=dp, bot=bot).register(app, path=WEBHOOK_PATH)
+
+    # YooKassa webhook и healthcheck
     app.router.add_post("/yookassa/webhook", yookassa_webhook)
     app.router.add_get("/health", lambda r: web.Response(text="ok"))
+
+    setup_application(app, dp, bot=bot)
+
+    print(f"✅ Бот запущен в webhook-режиме!")
+    print(f"✅ URL: {WEBHOOK_URL}")
+    print(f"✅ Порт: {WEBHOOK_PORT}")
+    print(f"✅ Админы: {os.getenv('ADMIN_IDS')}")
 
     runner = web.AppRunner(app)
     await runner.setup()
     await web.TCPSite(runner, host="0.0.0.0", port=WEBHOOK_PORT).start()
 
-    print(f"✅ Бот запущен! Порт: {WEBHOOK_PORT}")
-    print(f"✅ Групповой чат: включается через админ-панель")
-    print(f"✅ Админы: {os.getenv('ADMIN_IDS')}")
-
-    try:
-        await dp.start_polling(
-            bot,
-            allowed_updates=["message", "callback_query", "my_chat_member", "chat_member"]
-        )
-    finally:
-        await runner.cleanup()
-        await bot.session.close()
+    # Держим процесс живым
+    await asyncio.Event().wait()
 
 
 if __name__ == "__main__":
