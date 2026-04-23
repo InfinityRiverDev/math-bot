@@ -194,16 +194,18 @@ def _add(chat_id, role, content):
     if chat_id not in _history:
         _history[chat_id] = []
     
-    # ✅ НЕ ДОПУСКАЕМ две одинаковые роли подряд
+    # ✅ Если роль та же — ДОПОЛНЯЕМ последнее сообщение, а не игнорируем
     if _history[chat_id] and _history[chat_id][-1]["role"] == role:
-        # Если роль та же — заменяем последнее сообщение (или можно игнорировать)
-        # Лучше игнорировать, чтобы не плодить дубли
-        return
+        # Объединяем с предыдущим сообщением того же автора
+        prev_content = _history[chat_id][-1]["content"]
+        _history[chat_id][-1]["content"] = f"{prev_content}\n{content}"
+    else:
+        # Новая роль — добавляем новое сообщение
+        _history[chat_id].append({"role": role, "content": content})
     
-    _history[chat_id].append({"role": role, "content": content})
+    # Ограничиваем историю 20 сообщениями
     if len(_history[chat_id]) > 20:
         _history[chat_id] = _history[chat_id][-20:]
-
 
 # ── Обработчик сообщений ──────────────────────────────────────────
 
