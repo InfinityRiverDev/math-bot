@@ -55,6 +55,11 @@ async def main():
     # ✅ КРИТИЧНО: удаляем вебхук ПЕРЕД polling
     # Это убирает TelegramConflictError если вебхук был установлен
     await bot.delete_webhook(drop_pending_updates=True)
+    await asyncio.sleep(3)
+    
+    # Проверяем что вебхук точно снят
+    webhook_info = await bot.get_webhook_info()
+    logging.info(f"Webhook URL: '{webhook_info.url}' (должен быть пустым)")
     logging.info("Webhook deleted, starting polling...")
 
     # Порядок важен: attendance ДО group_chat, group_chat ПОСЛЕДНИМ
