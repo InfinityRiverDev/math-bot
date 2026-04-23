@@ -9,6 +9,7 @@ handlers/group_chat.py  —  ИИ-общение в группах.
     (только для админов бота)
 """
 import os, random, asyncio, aiohttp, logging
+import json
 from datetime import datetime
 from aiogram import Router, Bot, F
 from aiogram.filters import Command
