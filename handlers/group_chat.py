@@ -143,22 +143,18 @@ async def _ask_ai(text: str, ctx: list) -> str | None:
                     logger.error(f"[GROUP AI] HTTP {r.status}: {error_text[:200]}")
                     return None
                 
-                # Собираем ответ из стрима
                 full_answer = ""
                 async for line in r.content:
                     line = line.decode().strip()
                     if line.startswith("data: "):
                         try:
-                            import json
                             data = json.loads(line[6:])
-                            # Проверяем, есть ли контент в дельте
                             if 'choices' in data and len(data['choices']) > 0:
                                 delta = data['choices'][0].get('delta', {})
                                 content = delta.get('content', '')
                                 if content:
                                     full_answer += content
-                        except Exception as e:
-                            logger.debug(f"[GROUP AI] Parse error: {e}")
+                        except:
                             continue
                 
                 if full_answer:
@@ -171,13 +167,14 @@ async def _ask_ai(text: str, ctx: list) -> str | None:
     except Exception as e:
         logger.error(f"[GROUP AI] Exception: {e}")
         return None
-
+    
 # История сообщений в памяти
 _history: dict[int, list] = {}
 
 def _add(chat_id, role, content):
     if chat_id not in _history:
         _history[chat_id] = []
+    # ✅ ИСПРАВЛЕНО: не добавляем имя в content
     _history[chat_id].append({"role": role, "content": content})
     if len(_history[chat_id]) > 20:
         _history[chat_id] = _history[chat_id][-20:]
@@ -221,8 +218,8 @@ async def group_message_handler(message: Message, bot: Bot):
         if roll < threshold:
             should_reply = True
 
-    name = message.from_user.first_name or "User"
-    _add(chat_id, "user", f"{name}: {text}")
+    # ✅ ИСПРАВЛЕНО: не добавляем имя пользователя
+    _add(chat_id, "user", text)
 
     if not should_reply:
         return
