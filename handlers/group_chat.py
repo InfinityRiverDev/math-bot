@@ -51,8 +51,8 @@ async def register_group(chat_id: int, title: str = ""):
         {"$setOnInsert": {
             "chat_id":    chat_id,
             "chat_title": title,
-            "enabled":    False,  # выключен по умолчанию
-            "laziness":   60,
+            "enabled":    True,  # выключен по умолчанию
+            "laziness":   0,
             "added_at":   datetime.now().isoformat(),
         }},
         upsert=True
