@@ -980,6 +980,10 @@ async def admin_group_chat_menu(callback: CallbackQuery):
             InlineKeyboardButton(
                 text=f"🦥 {laz}%",
                 callback_data=f"gc_lazy_{cid}"
+            ),
+            InlineKeyboardButton(
+                text="🗑",
+                callback_data=f"gc_delete_{cid}"
             )
         ])
 
@@ -1128,4 +1132,34 @@ async def admin_statistics_menu(callback: CallbackQuery):
         [InlineKeyboardButton(text="⬅️ Назад",      callback_data="admin_main")],
     ])
     await callback.message.edit_text(text, reply_markup=kb, parse_mode='HTML')
- 
+
+
+@router.callback_query(F.data.startswith("gc_delete_"), F.from_user.id.in_(ADMIN_IDS))
+async def admin_gc_delete_confirm(callback: CallbackQuery):
+    chat_id = int(callback.data.replace("gc_delete_", ""))
+    doc = await group_settings.find_one({"chat_id": chat_id})
+    title = doc.get("chat_title") or str(chat_id)
+
+    await callback.message.edit_text(
+        f"🗑 <b>Удалить группу?</b>\n\n"
+        f"«{title}»\n\n"
+        f"Группа будет удалена из базы. Бот останется в группе, "
+        f"но перестанет реагировать на сообщения до повторной регистрации.",
+        reply_markup=InlineKeyboardMarkup(inline_keyboard=[
+            [
+                InlineKeyboardButton(text="✅ Да, удалить", callback_data=f"gc_delete_confirm_{chat_id}"),
+                InlineKeyboardButton(text="❌ Отмена",      callback_data="admin_group_chat")
+            ]
+        ]),
+        parse_mode='HTML'
+    )
+    await callback.answer()
+
+
+@router.callback_query(F.data.startswith("gc_delete_confirm_"), F.from_user.id.in_(ADMIN_IDS))
+async def admin_gc_delete_do(callback: CallbackQuery):
+    chat_id = int(callback.data.replace("gc_delete_confirm_", ""))
+    await group_settings.delete_one({"chat_id": chat_id})
+    await callback.answer("🗑 Группа удалена")
+    # Возвращаемся в список
+    await admin_group_chat_menu(callback)
