@@ -1147,7 +1147,7 @@ async def admin_gc_delete_confirm(callback: CallbackQuery):
         f"но перестанет реагировать на сообщения до повторной регистрации.",
         reply_markup=InlineKeyboardMarkup(inline_keyboard=[
             [
-                InlineKeyboardButton(text="✅ Да, удалить", callback_data=f"gc_delete_confirm_{chat_id}"),
+                InlineKeyboardButton(text="✅ Да, удалить", callback_data=f"gc_delok_{chat_id}"),
                 InlineKeyboardButton(text="❌ Отмена",      callback_data="admin_group_chat")
             ]
         ]),
