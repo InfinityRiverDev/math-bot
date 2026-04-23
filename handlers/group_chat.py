@@ -134,7 +134,7 @@ async def _ask_ai(text: str, ctx: list) -> str | None:
                     "messages": msgs,
                     "temperature": 0.7,
                     "max_tokens": 300,
-                    "stream": True  # ← ДОБАВЛЯЕМ ЭТУ СТРОКУ
+                    "stream": True
                 }
             ) as r:
                 if r.status != 200:
@@ -148,15 +148,24 @@ async def _ask_ai(text: str, ctx: list) -> str | None:
                     line = line.decode().strip()
                     if line.startswith("data: "):
                         try:
+                            import json
                             data = json.loads(line[6:])
-                            content = data['choices'][0]['delta'].get('content', '')
-                            if content:
-                                full_answer += content
-                        except:
+                            # Проверяем, есть ли контент в дельте
+                            if 'choices' in data and len(data['choices']) > 0:
+                                delta = data['choices'][0].get('delta', {})
+                                content = delta.get('content', '')
+                                if content:
+                                    full_answer += content
+                        except Exception as e:
+                            logger.debug(f"[GROUP AI] Parse error: {e}")
                             continue
                 
-                logger.info(f"[GROUP AI] Got answer: {full_answer[:100]}...")
-                return full_answer.strip() if full_answer else None
+                if full_answer:
+                    logger.info(f"[GROUP AI] Got answer: {full_answer[:100]}...")
+                    return full_answer.strip()
+                else:
+                    logger.error(f"[GROUP AI] Empty answer from stream")
+                    return None
                 
     except Exception as e:
         logger.error(f"[GROUP AI] Exception: {e}")
