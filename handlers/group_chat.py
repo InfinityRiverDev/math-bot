@@ -193,7 +193,13 @@ _history: dict[int, list] = {}
 def _add(chat_id, role, content):
     if chat_id not in _history:
         _history[chat_id] = []
-    # ✅ ИСПРАВЛЕНО: не добавляем имя в content
+    
+    # ✅ НЕ ДОПУСКАЕМ две одинаковые роли подряд
+    if _history[chat_id] and _history[chat_id][-1]["role"] == role:
+        # Если роль та же — заменяем последнее сообщение (или можно игнорировать)
+        # Лучше игнорировать, чтобы не плодить дубли
+        return
+    
     _history[chat_id].append({"role": role, "content": content})
     if len(_history[chat_id]) > 20:
         _history[chat_id] = _history[chat_id][-20:]
