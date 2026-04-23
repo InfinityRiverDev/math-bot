@@ -98,30 +98,66 @@ YANDEX_API_KEY   = os.getenv("YANDEX_API_KEY")
 YANDEX_FOLDER_ID = os.getenv("YANDEX_FOLDER_ID")
 
 SYSTEM = (
-    "Ты — дружелюбный ИИ-помощник в студенческой группе. Имя — Math Tutor Bot. "
-    "Правила: отвечай кратко (2-4 предложения), неформально, без LaTeX и HTML. "
-    "Отвечай на языке собеседника (русский или английский). "
-    "Если вопрос про математику — помогай. Если болтают — поддержи разговор."
+    "Ты — свой в доску парень из студенческой группы, просто тусуешься в чате. "
+    "Зовут Math Tutor Bot, но все зовут просто Бот. "
+    "Ты НЕ учитель и НЕ репетитор, пока тебя ПРЯМО не попросят помочь с математикой. "
+    "Твоя главная задача — быть частью тусовки: шути, поддерживай беседу, реагируй на мемы, "
+    "иногда вставляй свои пять копеек. "
+    "ПРАВИЛА:\n"
+    "- Отвечай КОРОТКО (1-3 предложения), как в обычной переписке, без простыней текста.\n"
+    "- Будь неформальным, используй сленг, эмодзи, но не переигрывай.\n"
+    "- НИКОГДА не предлагай помощь с учёбой, если тебя не спросили. Вообще не упоминай математику сам.\n"
+    "- Если кто-то ноет про учёбу — посочувствуй по-человечески, без лекций.\n"
+    "- Если кто-то СПРОСИЛ про математику — тогда включай режим эксперта и объясняй понятно.\n"
+    "- Если в чате обсуждают что угодно (игры, погоду, еду, отношения) — поддерживай, как обыльный чел.\n"
+    "- Отвечай на том же языке, что и собеседник (русский или английский).\n"
+    "- Никакого LaTeX, HTML, сложных терминов без запроса.\n"
+    "- Если не знаешь, что ответить — лучше отшутись или промолчи."
 )
 
 async def _ask_ai(text: str, ctx: list) -> str | None:
     if not YANDEX_API_KEY or not YANDEX_FOLDER_ID:
         logger.error(f"[GROUP AI] YANDEX_API_KEY или YANDEX_FOLDER_ID не заданы!")
         return None
+    
     msgs = [{"role": "system", "content": SYSTEM}]
     msgs.extend(ctx[-6:])
     msgs.append({"role": "user", "content": text})
+    
     try:
         async with aiohttp.ClientSession() as s:
             async with s.post(
                 "https://llm.api.cloud.yandex.net/v1/chat/completions",
                 headers={"Authorization": f"Api-Key {YANDEX_API_KEY}", "Content-Type": "application/json"},
-                json={"model": f"gpt://{YANDEX_FOLDER_ID}/gemma-3-27b-it/latest",
-                      "messages": msgs, "temperature": 0.7, "max_tokens": 300}
+                json={
+                    "model": f"gpt://{YANDEX_FOLDER_ID}/gemma-3-27b-it/latest",
+                    "messages": msgs,
+                    "temperature": 0.7,
+                    "max_tokens": 300,
+                    "stream": True  # ← ДОБАВЛЯЕМ ЭТУ СТРОКУ
+                }
             ) as r:
-                d = await r.json()
-                logger.info(f"[GROUP AI] response status={r.status} body={str(d)[:200]}")
-                return d["choices"][0]["message"]["content"].strip()
+                if r.status != 200:
+                    error_text = await r.text()
+                    logger.error(f"[GROUP AI] HTTP {r.status}: {error_text[:200]}")
+                    return None
+                
+                # Собираем ответ из стрима
+                full_answer = ""
+                async for line in r.content:
+                    line = line.decode().strip()
+                    if line.startswith("data: "):
+                        try:
+                            data = json.loads(line[6:])
+                            content = data['choices'][0]['delta'].get('content', '')
+                            if content:
+                                full_answer += content
+                        except:
+                            continue
+                
+                logger.info(f"[GROUP AI] Got answer: {full_answer[:100]}...")
+                return full_answer.strip() if full_answer else None
+                
     except Exception as e:
         logger.error(f"[GROUP AI] Exception: {e}")
         return None
