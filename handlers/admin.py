@@ -983,7 +983,7 @@ async def admin_group_chat_menu(callback: CallbackQuery):
             ),
             InlineKeyboardButton(
                 text="🗑",
-                callback_data=f"gc_delete_{cid}"
+                callback_data=f"gc_del_{cid}"
             )
         ])
 
