@@ -137,42 +137,38 @@ def _add(chat_id, role, content):
 
 @router.message(F.text)
 async def group_message_handler(message: Message, bot: Bot):
-    # Пропускаем ссылки посещаемости
     if "one.kstu.ru/check-code/" in (message.text or ""):
         return
-
-    # Пропускаем команды
     if (message.text or "").startswith("/"):
         return
 
     chat_id = message.chat.id
-
-    # Если группа не зарегистрирована — регистрируем автоматически
     doc = await group_settings.find_one({"chat_id": chat_id})
     if not doc:
         await register_group(chat_id, message.chat.title or "")
-        return  # первый раз просто регистрируем, не отвечаем
+        return
 
     if not doc.get("enabled", False):
+        logger.warning(f"[GROUP CHAT] {chat_id} — disabled, skipping")
         return
 
     bot_info = await bot.get_me()
     text = message.text.strip()
     should_reply = False
 
-    # Упоминание @бота
     if bot_info.username and f"@{bot_info.username}" in text:
         should_reply = True
         text = text.replace(f"@{bot_info.username}", "").strip()
-    # Реплай на сообщение бота
     elif (message.reply_to_message
           and message.reply_to_message.from_user
           and message.reply_to_message.from_user.id == bot_info.id):
         should_reply = True
-    # Случайный ответ
     else:
         laziness = doc.get("laziness", 60)
-        if random.random() < max(0, 100 - laziness) / 100:
+        roll = random.random()
+        threshold = max(0, 100 - laziness) / 100
+        logger.info(f"[GROUP CHAT] roll={roll:.2f} threshold={threshold:.2f} should_reply={roll < threshold}")
+        if roll < threshold:
             should_reply = True
 
     name = message.from_user.first_name or "User"
@@ -181,10 +177,16 @@ async def group_message_handler(message: Message, bot: Bot):
     if not should_reply:
         return
 
+    logger.info(f"[GROUP CHAT] Asking AI for: {text[:50]}")
     ctx = _history.get(chat_id, [])[:-1]
     await asyncio.sleep(random.uniform(0.5, 1.5))
     answer = await _ask_ai(text, ctx)
+
+    # ← НОВОЕ: fallback если AI не ответил
     if not answer:
+        logger.error(f"[GROUP CHAT] AI returned None! YANDEX_API_KEY set: {bool(YANDEX_API_KEY)}, FOLDER_ID set: {bool(YANDEX_FOLDER_ID)}")
+        await message.reply("🤔 Не могу ответить прямо сейчас, попробуй позже.")
         return
+
     _add(chat_id, "assistant", answer)
     await message.reply(answer)
