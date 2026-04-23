@@ -1134,9 +1134,9 @@ async def admin_statistics_menu(callback: CallbackQuery):
     await callback.message.edit_text(text, reply_markup=kb, parse_mode='HTML')
 
 
-@router.callback_query(F.data.startswith("gc_delete_"), F.from_user.id.in_(ADMIN_IDS))
+@router.callback_query(F.data.startswith("gc_del_"), F.from_user.id.in_(ADMIN_IDS))
 async def admin_gc_delete_confirm(callback: CallbackQuery):
-    chat_id = int(callback.data.replace("gc_delete_", ""))
+    chat_id = int(callback.data.replace("gc_del_", ""))
     doc = await group_settings.find_one({"chat_id": chat_id})
     title = doc.get("chat_title") or str(chat_id)
 
@@ -1156,9 +1156,9 @@ async def admin_gc_delete_confirm(callback: CallbackQuery):
     await callback.answer()
 
 
-@router.callback_query(F.data.startswith("gc_delete_confirm_"), F.from_user.id.in_(ADMIN_IDS))
+@router.callback_query(F.data.startswith("gc_delok_"), F.from_user.id.in_(ADMIN_IDS))
 async def admin_gc_delete_do(callback: CallbackQuery):
-    chat_id = int(callback.data.replace("gc_delete_confirm_", ""))
+    chat_id = int(callback.data.replace("gc_delok_", ""))
     await group_settings.delete_one({"chat_id": chat_id})
     await callback.answer("🗑 Группа удалена")
     # Возвращаемся в список
