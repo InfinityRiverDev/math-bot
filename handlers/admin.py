@@ -69,11 +69,11 @@ def is_admin(message: Message) -> bool:
 # Главное меню
 # ===========================
 
-@router.callback_query(F.data == "admin_main", F.from_user.id.in_(ADMIN_IDS))
+@router.callback_query(F.data == "admin_panel_main", F.from_user.id.in_(ADMIN_IDS))
 async def admin_menu(callback: CallbackQuery):
     await callback.message.edit_text(
-        "🛠 <b>Панель управления администратора</b>\nВыберите действие:",
-        reply_markup=kb.admin_panel,
+        "🛠 <b>Панель управления администратора</b>\nВыберите раздел:",
+        reply_markup=kb.admin_panel_main,
         parse_mode='HTML'
     )
     await callback.answer()
@@ -158,7 +158,7 @@ async def plans_admin_kb() -> InlineKeyboardMarkup:
             InlineKeyboardButton(text="🗑", callback_data=f"admin_plan_del_{p['_id']}"),
         ])
     buttons.append([InlineKeyboardButton(text="➕ Создать тариф", callback_data="admin_plan_create")])
-    buttons.append([InlineKeyboardButton(text="⬅️ Назад", callback_data="admin_main")])
+    buttons.append([InlineKeyboardButton(text="⬅️ Назад", callback_data="admin_panel_main")])
     return InlineKeyboardMarkup(inline_keyboard=buttons)
 
 
@@ -373,7 +373,7 @@ async def promos_admin_kb() -> InlineKeyboardMarkup:
             InlineKeyboardButton(text="🗑", callback_data=f"admin_promo_del_{p['_id']}"),
         ])
     buttons.append([InlineKeyboardButton(text="➕ Создать промокод", callback_data="admin_promo_create")])
-    buttons.append([InlineKeyboardButton(text="⬅️ Назад", callback_data="admin_main")])
+    buttons.append([InlineKeyboardButton(text="⬅️ Назад", callback_data="admin_panel_main")])
     return InlineKeyboardMarkup(inline_keyboard=buttons)
 
 
@@ -482,7 +482,7 @@ async def admin_bans_menu(callback: CallbackQuery):
     kb_bans = InlineKeyboardMarkup(inline_keyboard=[
         [InlineKeyboardButton(text="🚫 Забанить", callback_data="admin_ban_start")],
         [InlineKeyboardButton(text="✅ Разбанить", callback_data="admin_unban_start")],
-        [InlineKeyboardButton(text="⬅️ Назад", callback_data="admin_main")]
+        [InlineKeyboardButton(text="⬅️ Назад", callback_data="admin_panel_main")]
     ])
     await callback.message.edit_text(
         "🚫 <b>Баны пользователей</b>",
@@ -756,7 +756,7 @@ def broadcast_mode_kb() -> InlineKeyboardMarkup:
             InlineKeyboardButton(text="👥 Всем",   callback_data="broadcast_all"),
             InlineKeyboardButton(text="🎯 По ID",  callback_data="broadcast_by_id"),
         ],
-        [InlineKeyboardButton(text="❌ Отмена", callback_data="admin_main")],
+        [InlineKeyboardButton(text="❌ Отмена", callback_data="admin_panel_main")],
     ])
 
 
@@ -987,7 +987,7 @@ async def admin_group_chat_menu(callback: CallbackQuery):
             )
         ])
 
-    buttons.append([InlineKeyboardButton(text="⬅️ Назад", callback_data="admin_main")])
+    buttons.append([InlineKeyboardButton(text="⬅️ Назад", callback_data="admin_panel_main")])
     await callback.message.edit_text(
         text,
         reply_markup=InlineKeyboardMarkup(inline_keyboard=buttons),
@@ -1129,7 +1129,7 @@ async def admin_statistics_menu(callback: CallbackQuery):
     kb = InlineKeyboardMarkup(inline_keyboard=[
         [InlineKeyboardButton(text="🏆 Топ XP",    callback_data="stats_top_xp"),
          InlineKeyboardButton(text="📊 Активность", callback_data="stats_activity")],
-        [InlineKeyboardButton(text="⬅️ Назад",      callback_data="admin_main")],
+        [InlineKeyboardButton(text="⬅️ Назад", callback_data="admin_panel_main")],
     ])
     await callback.message.edit_text(text, reply_markup=kb, parse_mode='HTML')
 
@@ -1163,3 +1163,25 @@ async def admin_gc_delete_do(callback: CallbackQuery):
     await callback.answer("🗑 Группа удалена")
     # Возвращаемся в список
     await admin_group_chat_menu(callback)
+
+# ===========================
+# МЕНЮ АДМИН-ПАНЕЛИ (СГРУППИРОВАННОЕ)
+# ===========================
+
+@router.callback_query(F.data == "admin_plans_promos", F.from_user.id.in_(ADMIN_IDS))
+async def admin_plans_promos_menu(callback: CallbackQuery):
+    await callback.answer()
+    await callback.message.edit_text(
+        "📦 <b>Тарифы и промокоды</b>\nВыберите действие:",
+        reply_markup=kb.admin_plans_promos,
+        parse_mode='HTML'
+    )
+
+@router.callback_query(F.data == "admin_users_menu", F.from_user.id.in_(ADMIN_IDS))
+async def admin_users_menu(callback: CallbackQuery):
+    await callback.answer()
+    await callback.message.edit_text(
+        "👤 <b>Управление пользователями</b>\nВыберите действие:",
+        reply_markup=kb.admin_users_menu,
+        parse_mode='HTML'
+    )

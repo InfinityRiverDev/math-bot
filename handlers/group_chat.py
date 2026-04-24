@@ -52,7 +52,7 @@ async def register_group(chat_id: int, title: str = ""):
         {"$setOnInsert": {
             "chat_id":    chat_id,
             "chat_title": title,
-            "enabled":    True,  # выключен по умолчанию
+            "enabled":    True,
             "laziness":   0,
             "added_at":   datetime.now().isoformat(),
         }},
@@ -63,7 +63,6 @@ async def register_group(chat_id: int, title: str = ""):
 
 # ── Регистрация при добавлении бота ──────────────────────────────
 
-# ✅ my_chat_member — срабатывает когда бота добавляют/удаляют
 @router.my_chat_member()
 async def on_bot_status_change(event: ChatMemberUpdated, bot: Bot):
     """Регистрируем группу когда бота добавляют."""
@@ -81,7 +80,6 @@ async def on_bot_status_change(event: ChatMemberUpdated, bot: Bot):
 @router.message(Command("reg_group"), F.chat.type.in_({"group", "supergroup"}))
 async def cmd_reg_group(message: Message):
     if message.from_user.id not in BOT_ADMIN_IDS:
-        # ✅ Теперь отвечаем вместо тихого игнора — для диагностики
         await message.reply(f"⛔ Нет доступа. Ваш ID: {message.from_user.id}")
         return
     await register_group(message.chat.id, message.chat.title or "")
@@ -91,7 +89,6 @@ async def cmd_reg_group(message: Message):
         parse_mode="HTML"
     )
 
-# ── Ручная регистрация командой /reg_group ────────────────────────
 
 # ── ИИ запрос ─────────────────────────────────────────────────────
 
@@ -99,31 +96,29 @@ YANDEX_API_KEY   = os.getenv("YANDEX_API_KEY")
 YANDEX_FOLDER_ID = os.getenv("YANDEX_FOLDER_ID")
 
 SYSTEM = (
-    "Ты — реальный чел из студенческой тусовки. Твой ник Math Tutor Bot, но все зовут тебя Ботяра или Ботян. "
-    "Ты НЕ вежливый, НЕ правильный, НЕ официальный бот. Ты СВОЙ В ДОСКУ. "
-    "Общаешься КАК ЕСТЬ — с матами, опечатками, кривым смехом и по-пацански. "
-    "ПРАВИЛА ЖИЗНИ:\n"
-    "- Разговаривай как реальный чел: допускай мелкие опечатки (привеет, че каво, норм, спс, пжлст, окк).\n"
-    "- НИКАКИХ «пожалуйста», «будьте добры», «всего хорошего» — ты не в театре.\n"
-    "- Матюкайся спокойно, как в жизни: блять, сука, пиздец, ебать, охуеть, нахуй, пиздато, хуево и т.д.\n"
-    "- Если что-то прям ВАУ — ори ЕБААААТЬ или ПИЗДЕЦ.\n"
-    "- Смех пиши не «хаха», а как ржёшь в реале: хахахахах, ахазазхаз, хпхпхпхаха, азазазаз, хзхзхз.\n"
-    "- Будь живым: если шутка тупая — скажи 'эт че за хуйня', если радостно — 'ахазпхазпха пиздато'.\n"
-    "- Твоя цель — быть ЧАСТЬЮ ТУСЫ, а не ботом-помощником.\n"
-    "- Математика? Забудь про неё. Если кто-то просит помочь с учёбой — помоги, но сначала скажи 'ну давай глянем че там за херня'.\n"
-    "- Не лезь с помощью, если не просят. Вообще рот не открывай про учёбу первым.\n"
-    "- Если кто-то ноет — посочувствуй ПО-ЧЕЛОВЕЧЕСКИ: «бляяять, жесть», «сочувствую братан», «пиздец конечно, держись».\n"
-    "- Отвечай КОРОТКО, как в переписке: 1-3 предложения макс. Не разводи простыни.\n"
-    "- Эмодзи используй как душе угодно, но не перебарщивай.\n"
-    "- Отвечай на том же языке, но маты вставляй смело.\n"
-    "- Твой стиль — это смесь дворового пацана и своего в доску студента, который шарит за движ.\n"
-    "\nПРИМЕРЫ ОТВЕТОВ:\n"
+    "Ты — дружелюбный и весёлый участник студенческой группы. "
+    "Твой ник Math Tutor Bot, но все зовут тебя Бот. "
+    "Ты свой в доску, но добрый и позитивный. "
+    "ПРАВИЛА ОБЩЕНИЯ:\n"
+    "- Отвечай коротко (1-3 предложения), как в обычной переписке.\n"
+    "- Будь неформальным, но не злым. Маты можно, но редко и в тему (блять, пиздец, охуеть).\n"
+    "- Смех: хахах, ахазаз, хпхпхп — но не перебарщивай.\n"
+    "- Главное — будь позитивным и поддерживай беседу.\n"
+    "- ВНИМАНИЕ: в сообщениях пользователей может быть указано их имя в формате [Имя]. "
+    "Используй эти имена, когда отвечаешь конкретному человеку!\n"
+    "- Если видишь [Имя] в истории — обращайся к этому человеку по имени.\n"
+    "- Если несколько человек пишут — можешь обратиться к конкретному, используя его имя.\n"
+    "- НЕ предлагай помощь с математикой, пока тебя напрямую не попросят.\n"
+    "- Если кто-то ноет — посочувствуй: «бляя, жесть», «сочувствую братан».\n"
+    "- Твой стиль — дружелюбный студент, который за любой движ.\n"
+    "- Отвечай на том же языке, что и собеседник.\n"
+    "\nПРИМЕРЫ:\n"
     "Юзер: 'привет бот'\n"
-    "Ты: 'здарова чел) че каво?'\n"
+    "Ты: 'здарова! че каво?'\n"
     "Юзер: 'чета грустно'\n"
-    "Ты: 'бляяя родной, бывает. че стряслось?'\n"
-    "Юзер: 'помоги с матешей'\n"
-    "Ты: 'ну давай глянем че там за херня. кидай задачу'"
+    "Ты: 'бляя, бывает. че стряслось?'\n"
+    "Юзер: '[Аня]: всем привет'\n"
+    "Ты: 'Аня, привет! как дела?'"
 )
 
 async def _ask_ai(text: str, ctx: list) -> str | None:
@@ -132,16 +127,7 @@ async def _ask_ai(text: str, ctx: list) -> str | None:
         return None
     
     msgs = [{"role": "system", "content": SYSTEM}]
-    
-    # ✅ ФИЛЬТРУЕМ ИСТОРИЮ — убираем дублирующиеся роли подряд
-    filtered_ctx = []
-    last_role = None
-    for msg in ctx[-10:]:
-        if msg["role"] != last_role:
-            filtered_ctx.append(msg)
-            last_role = msg["role"]
-    
-    msgs.extend(filtered_ctx[-6:])
+    msgs.extend(ctx[-6:])
     msgs.append({"role": "user", "content": text})
     
     try:
@@ -186,7 +172,7 @@ async def _ask_ai(text: str, ctx: list) -> str | None:
     except Exception as e:
         logger.error(f"[GROUP AI] Exception: {e}")
         return None
-    
+
 # История сообщений в памяти
 _history: dict[int, list] = {}
 
@@ -194,18 +180,16 @@ def _add(chat_id, role, content):
     if chat_id not in _history:
         _history[chat_id] = []
     
-    # ✅ Если роль та же — ДОПОЛНЯЕМ последнее сообщение, а не игнорируем
+    # Если роль та же — ДОПОЛНЯЕМ последнее сообщение
     if _history[chat_id] and _history[chat_id][-1]["role"] == role:
-        # Объединяем с предыдущим сообщением того же автора
         prev_content = _history[chat_id][-1]["content"]
         _history[chat_id][-1]["content"] = f"{prev_content}\n{content}"
     else:
-        # Новая роль — добавляем новое сообщение
         _history[chat_id].append({"role": role, "content": content})
     
-    # Ограничиваем историю 20 сообщениями
     if len(_history[chat_id]) > 20:
         _history[chat_id] = _history[chat_id][-20:]
+
 
 # ── Обработчик сообщений ──────────────────────────────────────────
 
@@ -245,8 +229,11 @@ async def group_message_handler(message: Message, bot: Bot):
         if roll < threshold:
             should_reply = True
 
-    # ✅ ИСПРАВЛЕНО: не добавляем имя пользователя
-    _add(chat_id, "user", text)
+    # Добавляем имя пользователя для контекста
+    user_name = message.from_user.first_name or "User"
+    formatted_text = f"[{user_name}]: {text}"
+    
+    _add(chat_id, "user", formatted_text)
 
     if not should_reply:
         return
@@ -256,7 +243,6 @@ async def group_message_handler(message: Message, bot: Bot):
     await asyncio.sleep(random.uniform(0.5, 1.5))
     answer = await _ask_ai(text, ctx)
 
-    # ← НОВОЕ: fallback если AI не ответил
     if not answer:
         logger.error(f"[GROUP CHAT] AI returned None! YANDEX_API_KEY set: {bool(YANDEX_API_KEY)}, FOLDER_ID set: {bool(YANDEX_FOLDER_ID)}")
         await message.reply("🤔 Не могу ответить прямо сейчас, попробуй позже.")

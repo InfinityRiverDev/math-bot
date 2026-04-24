@@ -49,7 +49,10 @@ async def mark_user(session: aiohttp.ClientSession, token: str, code: str) -> bo
         return False
 
 
-@router.message(F.chat.type.in_({"group", "supergroup"}), F.text.contains("one.kstu.ru/check-code/"))
+@router.message(
+    F.chat.type.in_({"group", "supergroup"}),
+    F.text.contains("one.kstu.ru/check-code/")
+)
 async def watch_attendance_link(message: Message, bot: Bot):
     """Обработчик сообщений в группах — ищет ссылки на отметку."""
     if not message.text:
@@ -61,12 +64,13 @@ async def watch_attendance_link(message: Message, bot: Bot):
 
     code = match.group(1)
 
+    print(f"Found attendance code: {code}")
+
     if code in processed_codes:
         print(f"Code {code} already processed, skipping.")
         return
 
     processed_codes.add(code)
-    print(f"Found attendance code: {code}")
 
     # Получаем всех зарегистрированных пользователей
     user_ids = await get_all_users()
