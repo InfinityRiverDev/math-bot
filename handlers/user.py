@@ -27,6 +27,7 @@ class CalculatorStates(StatesGroup):
     waiting_for_input = State()
     tutor_waiting = State()
     practice_waiting = State()
+    art_waiting = State()   # ← ДОБАВЬ
 
 
 
@@ -876,3 +877,61 @@ async def practice_handle_text(message: Message, state: FSMContext, bot: Bot):
             await res_msg.delete()
         except:
             pass
+
+# ========================
+# 🎨 Yandex ART — вход
+# ========================
+
+@router.callback_query(F.data == "ai_art")
+async def open_art(callback: CallbackQuery, state: FSMContext):
+    await callback.answer()
+    await state.set_state(CalculatorStates.art_waiting)
+    await callback.message.edit_text(
+        "🎨 <b>Генерация изображений</b>\n\n"
+        "Опиши что хочешь нарисовать — и я создам картинку!\n\n"
+        "💡 <b>Советы:</b>\n"
+        "• Пиши подробно: стиль, цвета, настроение\n"
+        "• Например: <code>закат над горами в аниме стиле, яркие цвета</code>\n"
+        "• Или: <code>уютная библиотека с книгами и свечами, реализм</code>\n\n"
+        "⏳ Генерация занимает 15-30 секунд\n\n"
+        "Для выхода напиши /cancel",
+        parse_mode='HTML'
+    )
+
+
+@router.message(CalculatorStates.art_waiting, F.text)
+async def art_handle_prompt(message: Message, state: FSMContext, bot: Bot):
+    prompt = message.text.strip()
+    
+    msg = await message.answer(
+        "🎨 <b>Генерирую изображение...</b>\n\n"
+        "⏳ Это займёт 15-30 секунд, подожди...",
+        parse_mode='HTML'
+    )
+
+    from services.yandex_art import generate_image
+    image_bytes = await generate_image(prompt)
+
+    if not image_bytes:
+        await msg.edit_text(
+            "❌ <b>Не удалось сгенерировать изображение</b>\n\n"
+            "Попробуй переформулировать запрос или повтори позже.\n\n"
+            "Напиши новый промпт или /cancel для выхода.",
+            parse_mode='HTML'
+        )
+        return
+
+    await msg.delete()
+
+    import io
+    from aiogram.types import BufferedInputFile
+    file = BufferedInputFile(image_bytes, filename="art.png")
+
+    await message.answer_photo(
+        photo=file,
+        caption=f"🎨 <b>Готово!</b>\n\n<i>«{prompt[:100]}»</i>\n\n"
+                f"Напиши новый промпт для следующей картинки\nили /cancel для выхода.",
+        parse_mode='HTML'
+    )
+
+    await give_xp(bot, message.from_user.id, "art_generated")

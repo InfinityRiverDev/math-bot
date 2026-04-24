@@ -21,6 +21,7 @@ XP_REWARDS = {
     "tutor_image":          8,   # фото репетитору
     "tutor_document":       6,   # документ репетитору
     "practice_request":    10,   # запросил задачи для практики
+    "art_generated":        5, 
 
     # Калькулятор
     "calc_text":            3,   # решил задачу текстом

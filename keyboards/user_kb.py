@@ -61,6 +61,7 @@ def get_locked_kb(is_admin: bool) -> InlineKeyboardMarkup:
 ai_tutor_menu = InlineKeyboardMarkup(inline_keyboard=[
     [InlineKeyboardButton(text="🎓 ИИ-репетитор", callback_data="ai-tutor")],
     [InlineKeyboardButton(text="✍️ Практика",      callback_data="practice")],
+    [InlineKeyboardButton(text="🎨 Генерация картинок", callback_data="ai_art")],  # ← ДОБАВЬ
     [InlineKeyboardButton(text="⬅️ Назад",          callback_data="back_to_main")]
 ])
 
