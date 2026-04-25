@@ -31,7 +31,7 @@ async def safe_edit(msg, text: str, markup: InlineKeyboardMarkup = None):
 # 🏠 Главное меню /help
 # =========================
 HELP_MAIN_TEXT = (
-    "ℹ️ <b>Справка — Math Tutor Bot</b>\n\n"
+    "ℹ️ <b>Справка — KNRTU core Bot</b>\n\n"
     "Привет! Здесь ты найдёшь всё, что нужно знать о боте.\n"
     "Выбери раздел:"
 )

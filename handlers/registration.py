@@ -169,7 +169,7 @@ async def cmd_start(message: Message, state: FSMContext):
 
         if has_sub or is_admin:
             await message.answer(
-                '👋 <b>Добро пожаловать в Math Tutor!</b>\n\n'
+                '👋 <b>Добро пожаловать в KNRTU core BOT!</b>\n\n'
                     '🤖 Я помогу тебе с математикой, прослежу за твоим расписанием '
                     'и автоматически отмечу тебя на парах.\n\n'
                     '👇 Выбери раздел:',
