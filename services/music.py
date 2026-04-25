@@ -268,6 +268,17 @@ async def _search_and_download(status_msg, query: str, user_id: int, bot: Bot):
             "noplaylist":  True,
             "max_filesize": MAX_FILE_MB * 1024 * 1024,
             "default_search": "ytsearch1",
+            # ✅ Фикс bot detection
+            "extractor_args": {
+                "youtube": {
+                    "player_client": ["ios", "web"],
+                }
+            },
+            "http_headers": {
+                "User-Agent": "Mozilla/5.0 (iPhone; CPU iPhone OS 16_0 like Mac OS X) "
+                            "AppleWebKit/605.1.15 (KHTML, like Gecko) Version/16.0 Mobile/15E148 Safari/604.1",
+            },
+            "socket_timeout": 30,
             "postprocessors": [{
                 "key":              "FFmpegExtractAudio",
                 "preferredcodec":   "mp3",
@@ -375,38 +386,52 @@ async def _search_and_download(status_msg, query: str, user_id: int, bot: Bot):
 def _yt_download_sync(query: str, opts: dict, tmpdir: str) -> dict | None:
     import yt_dlp
 
+    # Пробуем YouTube
+    try:
+        result = _try_download(f"ytsearch1:{query}", opts, tmpdir)
+        if result:
+            return result
+    except Exception as e:
+        if "Sign in" in str(e) or "bot" in str(e).lower():
+            pass  # fallback на SoundCloud
+        else:
+            raise
+
+    # Fallback — SoundCloud
+    try:
+        sc_opts = dict(opts)
+        sc_opts.pop("extractor_args", None)
+        sc_opts.pop("http_headers", None)
+        return _try_download(f"scsearch1:{query}", sc_opts, tmpdir)
+    except Exception:
+        return None
+
+
+def _try_download(search_query: str, opts: dict, tmpdir: str) -> dict | None:
+    import yt_dlp
     result = {}
     with yt_dlp.YoutubeDL(opts) as ydl:
-        info = ydl.extract_info(query, download=True)
+        info = ydl.extract_info(search_query, download=True)
         if not info:
             return None
-
-        # При ytsearch1 результат может быть в entries
         entry = info
         if "entries" in info and info["entries"]:
             entry = info["entries"][0]
-
         result["title"]    = entry.get("title", "")
         result["artist"]   = (
-            entry.get("artist") or
-            entry.get("uploader") or
-            entry.get("channel") or
-            ""
+            entry.get("artist") or entry.get("uploader") or
+            entry.get("channel") or ""
         )
         result["duration"] = entry.get("duration")
 
-    # Ищем mp3 файл
     for fname in os.listdir(tmpdir):
         if fname.endswith(".mp3"):
             result["filepath"] = os.path.join(tmpdir, fname)
             return result
-
-    # Запасной вариант — любой аудиофайл
     for fname in os.listdir(tmpdir):
         if any(fname.endswith(ext) for ext in (".m4a", ".webm", ".ogg", ".opus")):
             result["filepath"] = os.path.join(tmpdir, fname)
             return result
-
     return None
 
 

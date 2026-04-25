@@ -27,9 +27,48 @@ class CalculatorStates(StatesGroup):
     waiting_for_input = State()
     tutor_waiting = State()
     practice_waiting = State()
-    art_waiting = State()   # ← ДОБАВЬ
+    art_waiting = State()
 
 
+# =============================================================
+# 🖼 ШАБЛОНЫ ПРЕЗЕНТАЦИЙ
+# =============================================================
+# Здесь меняй названия, описания и пути к файлам коллажей.
+#
+# "name"  — отображается пользователю как заголовок шаблона
+#           (должно совпадать с текстом кнопки в user_kb.py → presentation)
+# "desc"  — короткое описание, которое видит пользователь под фото
+# "file"  — путь к файлу коллажа относительно корня проекта
+#
+# Файлы коллажей положи сюда: media/presentation_templates/
+#   collage_1.jpg  ← коллаж из 1.pptx
+#   collage_2.jpg  ← коллаж из 2.pptx
+#   collage_3.jpg  ← коллаж из 3.pptx
+#   collage_4.jpg  ← коллаж из nature__2_.pptx (переименуй файл)
+# =============================================================
+
+TEMPLATES = {
+    "collage_1": {
+        "name": "Шаблон 1 — [название]",       # ← МЕНЯЙ: название шаблона
+        "desc": "Описание первого шаблона",      # ← МЕНЯЙ: описание для пользователя
+        "file": "media/presentation_templates/collage_1.jpg",  # ← путь к файлу
+    },
+    "collage_2": {
+        "name": "Шаблон 2 — [название]",        # ← МЕНЯЙ: название шаблона
+        "desc": "Описание второго шаблона",      # ← МЕНЯЙ: описание для пользователя
+        "file": "media/presentation_templates/collage_2.jpg",
+    },
+    "collage_3": {
+        "name": "Шаблон 3 — [название]",        # ← МЕНЯЙ: название шаблона
+        "desc": "Описание третьего шаблона",     # ← МЕНЯЙ: описание для пользователя
+        "file": "media/presentation_templates/collage_3.jpg",
+    },
+    "collage_4": {
+        "name": "Шаблон 4 — [название]",        # ← МЕНЯЙ: название шаблона
+        "desc": "Описание четвёртого шаблона",   # ← МЕНЯЙ: описание для пользователя
+        "file": "media/presentation_templates/collage_4.jpg",
+    },
+}
 
 
 # ========================
@@ -137,7 +176,7 @@ async def cmd_print(callback: CallbackQuery):
         '• Цена одной страницы печати - 10₽\n'
         '• Заказ можно будет забрать в институте или в ДАС №6\n\n'
         'Для того чтобы заказать печать обратитесь к менеджеру:',
-        reply_markup=kb.print,
+        reply_markup=kb.print_kb,
         parse_mode='HTML'
     )
 
@@ -187,21 +226,41 @@ async def cmd_backward_to_presentation(callback: CallbackQuery):
         parse_mode='HTML'
     )
 
-@router.callback_query(F.data == 'pr_1')
-async def cmd_pr_1(callback: CallbackQuery):
+async def _send_template(callback: CallbackQuery, key: str):
+    tmpl = TEMPLATES[key]
     await callback.answer()
     try:
         await callback.message.delete()
     except:
         pass
+    await callback.message.answer_photo(
+        photo=FSInputFile(tmpl["file"]),
+        caption=(
+            f"🎞️ <b>{tmpl['name']}</b>\n\n"
+            f"📌 {tmpl['desc']}\n\n"
+            f"💰 <b>Цена:</b> от 250₽ · срок 1 день\n\n"
+            f"Нажмите кнопку ниже — откроется чат с менеджером:"
+        ),
+        reply_markup=kb.get_order_pr_kb(tmpl["name"]),
+        parse_mode='HTML'
+    )
 
-    await callback.message.answer_photo(photo=FSInputFile('media/presentation_templates/pr_1.jpg'),
-                                        caption='📊 <b>Шаблон:</b> шаблон 1\n'
-                                                '📌 <b>Описание:</b> Чистый и аккуратный стиль, идеально для учебы и защиты проектов\n'
-                                                '💰 <b>Цена:</b> 250₽\n\n'
-                                                'Для заказа нажмите кнопку ниже:',
-                                        reply_markup=kb.order_pr_1)
 
+@router.callback_query(F.data == 'collage_1')
+async def cmd_pr_1(callback: CallbackQuery):
+    await _send_template(callback, "collage_1")
+
+@router.callback_query(F.data == 'collage_2')
+async def cmd_pr_2(callback: CallbackQuery):
+    await _send_template(callback, "collage_2")
+
+@router.callback_query(F.data == 'collage_3')
+async def cmd_pr_3(callback: CallbackQuery):
+    await _send_template(callback, "collage_3")
+
+@router.callback_query(F.data == 'collage_4')
+async def cmd_pr_4(callback: CallbackQuery):
+    await _send_template(callback, "collage_4")
 
 # ========================
 # Личное
@@ -297,12 +356,6 @@ async def cmd_focus(callback: CallbackQuery):
     )
 
 
-# @router.callback_query(F.data == 'music')
-# async def cmd_music(callback: CallbackQuery):
-#     await callback.answer("🚧 Функция 'Музыка' в разработке!", show_alert=True)
-
-
-
 # ========================
 # Отмена
 # ========================
@@ -327,164 +380,6 @@ async def cmd_cancel(message: Message, state: FSMContext):
         '⛔ Остановлено.\nВернулся в главное меню 👇',
         reply_markup=kb.get_start_kb(message.from_user.id in ADMIN_IDS)
     )
-
-### Калькулятор
-
-# # ========================
-# # Калькулятор — вход
-# # ========================
-#
-# @router.callback_query(F.data == 'calculator')
-# async def open_calculator(callback: CallbackQuery, state: FSMContext):
-#     await callback.answer()
-#     await state.set_state(CalculatorStates.waiting_for_input)
-#     await callback.message.edit_text(
-#         '🧮 <b>Умный калькулятор</b>\n\n'
-#         'Отправь мне задачу любым удобным способом:\n\n'
-#         '✏️ <b>Текстом</b> — например: <code>2^10 + корень из 144</code>\n'
-#         '📷 <b>Фото</b> — сфотографируй задачу из учебника\n'
-#         '🎤 <b>Голосовым</b> — продиктуй задачу\n'
-#         '📄 <b>Документом</b> — прикрепи файл с задачами\n\n'
-#         'Для выхода напиши /cancel',
-#         parse_mode='HTML'
-#     )
-#
-#
-# # ========================
-# # Калькулятор — текст
-# # ========================
-#
-# @router.message(CalculatorStates.waiting_for_input, F.text)
-# async def handle_text(message: Message, state: FSMContext):
-#     thinking_msg = await message.answer('🤔 Решаю задачу...')
-#     task = asyncio.create_task(solve_math(message.text))
-#     await state.update_data(current_task=task, cancelled=False)
-#     try:
-#         result = await task
-#         await thinking_msg.delete()
-#         await message.answer(f"\n{result}", parse_mode='HTML')
-#         log_activity()
-#     except asyncio.CancelledError:
-#         try:
-#             await thinking_msg.delete()
-#         except:
-#             pass
-#
-#
-# # ========================
-# # Калькулятор — фото
-# # ========================
-#
-# @router.message(CalculatorStates.waiting_for_input, F.photo)
-# async def handle_photo(message: Message, bot: Bot, state: FSMContext):
-#     thinking_msg = await message.answer('📷 Распознаю текст на фото...')
-#     photo = message.photo[-1]
-#     file_in_io = io.BytesIO()
-#     await bot.download(photo, destination=file_in_io)
-#     image_bytes = file_in_io.getvalue()
-#     await thinking_msg.edit_text('🤔 Решаю задачу...')
-#     task = asyncio.create_task(solve_from_image(image_bytes))
-#     await state.update_data(current_task=task, cancelled=False)
-#     try:
-#         result = await task
-#         await thinking_msg.delete()
-#         await message.answer(f"\n{result}", parse_mode='HTML')
-#     except asyncio.CancelledError:
-#         try:
-#             await thinking_msg.delete()
-#         except:
-#             pass
-#
-#
-# # ========================
-# # Калькулятор — голосовое
-# # ========================
-#
-# @router.message(CalculatorStates.waiting_for_input, F.voice)
-# async def handle_voice(message: Message, bot: Bot, state: FSMContext):
-#     thinking_msg = await message.answer('🎤 Распознаю голосовое сообщение...')
-#     voice_buffer = io.BytesIO()
-#     await bot.download(message.voice, destination=voice_buffer)
-#     audio_bytes = voice_buffer.getvalue()
-#
-#     api_key = os.getenv("YANDEX_API_KEY")
-#     folder_id = os.getenv("YANDEX_FOLDER_ID")
-#
-#     try:
-#         async with aiohttp.ClientSession() as session:
-#             async with session.post(
-#                 "https://stt.api.cloud.yandex.net/speech/v1/stt:recognize",
-#                 headers={"Authorization": f"Api-Key {api_key}"},
-#                 params={"lang": "ru-RU", "format": "oggopus", "folderId": folder_id},
-#                 data=audio_bytes
-#             ) as resp:
-#                 data = await resp.json()
-#                 recognized_text = data.get("result", "")
-#     except Exception:
-#         recognized_text = ""
-#
-#     if not recognized_text:
-#         await thinking_msg.delete()
-#         await message.answer('❌ Не удалось распознать голосовое сообщение. Попробуй написать задачу текстом.')
-#         return
-#
-#     await thinking_msg.edit_text(f'🤔 Решаю: <i>{recognized_text}</i>...', parse_mode='HTML')
-#     task = asyncio.create_task(solve_math(recognized_text))
-#     await state.update_data(current_task=task, cancelled=False)
-#     try:
-#         result = await task
-#         await thinking_msg.delete()
-#         await message.answer(f'🎤 <b>Распознано:</b> <i>{recognized_text}</i>\n\n{result}', parse_mode='HTML')
-#     except asyncio.CancelledError:
-#         try:
-#             await thinking_msg.delete()
-#         except:
-#             pass
-#
-#
-# # ========================
-# # Калькулятор — документ
-# # ========================
-#
-# @router.message(CalculatorStates.waiting_for_input, F.document)
-# async def handle_document(message: Message, bot: Bot, state: FSMContext):
-#     doc = message.document
-#     mime = doc.mime_type or ""
-#
-#     if "text" not in mime and "pdf" not in mime:
-#         await message.answer(
-#             '❌ Поддерживаются только текстовые файлы (.txt).\n'
-#             'Для PDF — сфотографируй страницу и пришли как фото.'
-#         )
-#         return
-#
-#     thinking_msg = await message.answer('📄 Читаю документ...')
-#     file_in_io = io.BytesIO()
-#     await bot.download(doc, destination=file_in_io)
-#     file_bytes = file_in_io.getvalue()
-#
-#     try:
-#         text = file_bytes.decode("utf-8")
-#     except UnicodeDecodeError:
-#         text = file_bytes.decode("cp1251", errors="ignore")
-#
-#     if not text.strip():
-#         await thinking_msg.delete()
-#         await message.answer('❌ Документ пустой или не удалось прочитать.')
-#         return
-#
-#     await thinking_msg.edit_text('🤔 Решаю задачи из документа...')
-#     task = asyncio.create_task(solve_math(f"Задачи из документа:\n{text[:3000]}"))
-#     await state.update_data(current_task=task, cancelled=False)
-#     try:
-#         result = await task
-#         await thinking_msg.delete()
-#         await message.answer(f"\n{result}", parse_mode='HTML')
-#     except asyncio.CancelledError:
-#         try:
-#             await thinking_msg.delete()
-#         except:
-#             pass
 
 
 # ========================
@@ -661,6 +556,8 @@ async def tutor_handle_voice(message: Message, state: FSMContext, bot: Bot):
         voice_bytes = voice_buffer.getvalue()
 
         from services.tutor import speech_to_text, ask_tutor, clean_response
+
+        await res_msg.edit_text("🔍 <b>Распознаю речь...</b>", parse_mode='HTML')
         user_text = await speech_to_text(voice_bytes)
 
         if not user_text:
@@ -826,7 +723,6 @@ async def practice_handle_text(message: Message, state: FSMContext, bot: Bot):
     res_msg = await message.answer("✍️ <b>Генерирую задачи...</b>", parse_mode='HTML')
     await state.update_data(cancelled=False)
 
-    # ✅ ask_practice — отдельная функция с PRACTICE_PROMPT, без конфликта system-сообщений
     from services.tutor import ask_practice, clean_response
 
     full_text, displayed_text, last_edit_time = "", "", 0
@@ -851,7 +747,6 @@ async def practice_handle_text(message: Message, state: FSMContext, bot: Bot):
     await state.update_data(current_task=task)
 
     await log_activity(message.from_user.id, "practice")
-
     await give_xp(bot, message.from_user.id, "practice_request")
 
     try:
@@ -877,61 +772,3 @@ async def practice_handle_text(message: Message, state: FSMContext, bot: Bot):
             await res_msg.delete()
         except:
             pass
-
-# ========================
-# 🎨 Yandex ART — вход
-# ========================
-
-@router.callback_query(F.data == "ai_art")
-async def open_art(callback: CallbackQuery, state: FSMContext):
-    await callback.answer()
-    await state.set_state(CalculatorStates.art_waiting)
-    await callback.message.edit_text(
-        "🎨 <b>Генерация изображений</b>\n\n"
-        "Опиши что хочешь нарисовать — и я создам картинку!\n\n"
-        "💡 <b>Советы:</b>\n"
-        "• Пиши подробно: стиль, цвета, настроение\n"
-        "• Например: <code>закат над горами в аниме стиле, яркие цвета</code>\n"
-        "• Или: <code>уютная библиотека с книгами и свечами, реализм</code>\n\n"
-        "⏳ Генерация занимает 15-30 секунд\n\n"
-        "Для выхода напиши /cancel",
-        parse_mode='HTML'
-    )
-
-
-@router.message(CalculatorStates.art_waiting, F.text)
-async def art_handle_prompt(message: Message, state: FSMContext, bot: Bot):
-    prompt = message.text.strip()
-    
-    msg = await message.answer(
-        "🎨 <b>Генерирую изображение...</b>\n\n"
-        "⏳ Это займёт 15-30 секунд, подожди...",
-        parse_mode='HTML'
-    )
-
-    from services.yandex_art import generate_image
-    image_bytes = await generate_image(prompt)
-
-    if not image_bytes:
-        await msg.edit_text(
-            "❌ <b>Не удалось сгенерировать изображение</b>\n\n"
-            "Попробуй переформулировать запрос или повтори позже.\n\n"
-            "Напиши новый промпт или /cancel для выхода.",
-            parse_mode='HTML'
-        )
-        return
-
-    await msg.delete()
-
-    import io
-    from aiogram.types import BufferedInputFile
-    file = BufferedInputFile(image_bytes, filename="art.png")
-
-    await message.answer_photo(
-        photo=file,
-        caption=f"🎨 <b>Готово!</b>\n\n<i>«{prompt[:100]}»</i>\n\n"
-                f"Напиши новый промпт для следующей картинки\nили /cancel для выхода.",
-        parse_mode='HTML'
-    )
-
-    await give_xp(bot, message.from_user.id, "art_generated")

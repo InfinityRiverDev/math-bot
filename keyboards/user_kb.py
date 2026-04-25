@@ -1,13 +1,12 @@
 """
 keyboards/user_kb.py
-ИЗМЕНЕНИЯ:
-- Desmos перенесён в Образование
-- Админ-панель сгруппирована по разделам
 """
 
 import os
+import urllib.parse
 from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton, WebAppInfo
 
+# WEBAPP_URL задаётся один раз здесь
 WEBAPP_URL = os.getenv("WEBAPP_URL", "https://math-tutor-webapp.vercel.app/")
 
 
@@ -61,13 +60,13 @@ def get_locked_kb(is_admin: bool) -> InlineKeyboardMarkup:
 ai_tutor_menu = InlineKeyboardMarkup(inline_keyboard=[
     [InlineKeyboardButton(text="🎓 ИИ-репетитор", callback_data="ai-tutor")],
     [InlineKeyboardButton(text="✍️ Практика",      callback_data="practice")],
-    [InlineKeyboardButton(text="🎨 Генерация картинок", callback_data="ai_art")],  # ← ДОБАВЬ
+    [InlineKeyboardButton(text="🎨 Генерация картинок", callback_data="ai_art")],
     [InlineKeyboardButton(text="⬅️ Назад",          callback_data="back_to_main")]
 ])
 
 
 # =========================
-# 📚 Образование (Desmos перенесён сюда)
+# 📚 Образование
 # =========================
 education = InlineKeyboardMarkup(inline_keyboard=[
     [InlineKeyboardButton(text="📆 Расписание", callback_data="schedule")],
@@ -120,23 +119,23 @@ paid_works = InlineKeyboardMarkup(inline_keyboard=[
     [InlineKeyboardButton(text="⬅️ Назад",       callback_data="backward_to_services")]
 ])
 
+# =============================================================
+# 🖼 КНОПКИ ВЫБОРА ШАБЛОНОВ ПРЕЗЕНТАЦИЙ
+# =============================================================
+# Меняй только text= — это название, которое видит пользователь.
+# callback_data= НЕ ТРОГАЙ — он связан с обработчиком в user.py.
+#
+# ⚠️ Важно: значение text= здесь должно СОВПАДАТЬ с "name"
+#    соответствующего шаблона в словаре TEMPLATES в user.py,
+#    потому что именно оно передаётся в ссылку заказа.
+# =============================================================
 presentation = InlineKeyboardMarkup(inline_keyboard=[
-    [InlineKeyboardButton(text="Шаблон 1", callback_data="pr_1")],
-    [InlineKeyboardButton(text="Шаблон 2", callback_data="pr_2")],
-    [InlineKeyboardButton(text="Шаблон 3", callback_data="pr_3")],
-    [InlineKeyboardButton(text="Шаблон 4", callback_data="pr_4")],
-    [InlineKeyboardButton(text="Шаблон 5", callback_data="pr_5")],
-    [InlineKeyboardButton(text="⬅️ Назад",  callback_data="backward_to_paid_works")]
+    [InlineKeyboardButton(text="🖼 Шаблон 1 — [название]", callback_data="collage_1")],  # ← МЕНЯЙ text=
+    [InlineKeyboardButton(text="🖼 Шаблон 2 — [название]", callback_data="collage_2")],  # ← МЕНЯЙ text=
+    [InlineKeyboardButton(text="🖼 Шаблон 3 — [название]", callback_data="collage_3")],  # ← МЕНЯЙ text=
+    [InlineKeyboardButton(text="🖼 Шаблон 4 — [название]", callback_data="collage_4")],  # ← МЕНЯЙ text=
+    [InlineKeyboardButton(text="⬅️ Назад", callback_data="backward_to_paid_works")]
 ])
-
-order_pr_1 = InlineKeyboardMarkup(inline_keyboard=[
-    [InlineKeyboardButton(text="Заказать", url="https://t.me/mermely?text=Хочу%20заказать%20презентацию%20по%20шаблону%20%22Минимализм%22")],
-    [InlineKeyboardButton(text="⬅️ Назад", callback_data="backward_to_presentation")]
-])
-order_pr_2 = order_pr_1
-order_pr_3 = order_pr_1
-order_pr_4 = order_pr_1
-order_pr_5 = order_pr_1
 
 
 # =========================
@@ -164,10 +163,9 @@ profile = InlineKeyboardMarkup(inline_keyboard=[
 
 
 # =========================
-# ⚙️ Админ-панель (сгруппированная)
+# ⚙️ Админ-панель
 # =========================
 
-# Главное меню админ-панели
 admin_panel_main = InlineKeyboardMarkup(inline_keyboard=[
     [InlineKeyboardButton(text="👥 Статистика",          callback_data="admin_statistics")],
     [InlineKeyboardButton(text="💰 Финансы",             callback_data="admin_profit")],
@@ -180,21 +178,19 @@ admin_panel_main = InlineKeyboardMarkup(inline_keyboard=[
     [InlineKeyboardButton(text="⬅️ Назад",               callback_data="back_to_main")]
 ])
 
-# Подменю: Тарифы и промокоды
 admin_plans_promos = InlineKeyboardMarkup(inline_keyboard=[
     [InlineKeyboardButton(text="📦 Управление тарифами", callback_data="admin_plans")],
     [InlineKeyboardButton(text="🎟 Промокоды",           callback_data="admin_promos")],
     [InlineKeyboardButton(text="⬅️ Назад",               callback_data="admin_panel_main")]
 ])
 
-# Подменю: Пользователи
 admin_users_menu = InlineKeyboardMarkup(inline_keyboard=[
     [InlineKeyboardButton(text="🔍 Поиск по ID",    callback_data="admin_find_user")],
     [InlineKeyboardButton(text="🚫 Баны",           callback_data="admin_bans")],
     [InlineKeyboardButton(text="⬅️ Назад",          callback_data="admin_panel_main")]
 ])
 
-# Старая клавиатура для обратной совместимости
+# Для обратной совместимости
 admin_panel = InlineKeyboardMarkup(inline_keyboard=[
     [InlineKeyboardButton(text="👥 Статистика",          callback_data="admin_statistics")],
     [InlineKeyboardButton(text="📦 Тарифы и промокоды",  callback_data="admin_plans_promos")],
@@ -206,6 +202,7 @@ admin_panel = InlineKeyboardMarkup(inline_keyboard=[
     [InlineKeyboardButton(text="⚠️ Самоликвидация",      callback_data="self_destruction")],
     [InlineKeyboardButton(text="⬅️ Назад",               callback_data="back_to_main")]
 ])
+
 
 # =========================
 # 🤖 Групповой чат (админ)
@@ -248,3 +245,13 @@ def get_laziness_kb(chat_id: int, current: int) -> InlineKeyboardMarkup:
         buttons.append(row)
     buttons.append([InlineKeyboardButton(text="⬅️ Назад", callback_data="admin_group_chat")])
     return InlineKeyboardMarkup(inline_keyboard=buttons)
+
+
+def get_order_pr_kb(template_name: str) -> InlineKeyboardMarkup:
+    """Кнопка заказа — открывает миниапп сразу в чат презентаций."""
+    encoded = urllib.parse.quote(template_name)
+    url = f"{WEBAPP_URL.rstrip('/')}/?page=services&openchat=presentation&template={encoded}"
+    return InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton(text="💬 Заказать в чате", web_app=WebAppInfo(url=url))],
+        [InlineKeyboardButton(text="⬅️ Назад", callback_data="backward_to_presentation")]
+    ])
