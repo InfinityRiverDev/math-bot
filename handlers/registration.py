@@ -21,6 +21,7 @@ from database.models import is_registered, register_user_full
 import keyboards.user_kb as kb
 from services.links import federal_law_152_fz, privacy_policy
 from handlers.admin import ADMIN_IDS
+from aiogram.exceptions import TelegramBadRequest
 
 from database.billing_models import has_active_subscription
 
