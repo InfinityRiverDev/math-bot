@@ -178,7 +178,7 @@ async def cmd_start(message: Message, state: FSMContext):
             )
         else:
             await message.answer(
-                '<b>Привет! Я математический бот Math Tutor 🤖</b>\n\n'
+                '<b>Привет! Я математический бот KNRTU core 🤖</b>\n\n'
                 '🔒 <b>Для использования бота необходима подписка.</b>\n\n'
                 'Доступные разделы без подписки:\n'
                 '• 📝 Услуги\n'
