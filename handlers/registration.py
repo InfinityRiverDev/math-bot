@@ -150,50 +150,55 @@ def hash_password(password: str) -> str:
 
 @router.message(CommandStart())
 async def cmd_start(message: Message, state: FSMContext):
-    user_id = message.from_user.id
- 
-    await message.answer_sticker(
-        sticker="CAACAgIAAxkBAAFIA0Jp7AYki2CLo0TD6BaStdXYgzwY4wACjqYAAhbBYEv09LioO_p4xTsE"
-    )
- 
-    already = await is_registered(user_id)
- 
-    if already:
-        await state.clear()
-        is_admin = user_id in ADMIN_IDS
-        has_sub = await has_active_subscription(user_id)
- 
-        if has_sub or is_admin:
-            # Полный доступ
-            await message.answer(
-                '👋 <b>Добро пожаловать в Math Tutor!</b>\n\n'
-                    '🤖 Я помогу тебе с математикой, прослежу за твоим расписанием '
-                    'и автоматически отмечу тебя на парах.\n\n'
-                    '👇 Выбери раздел:',
-                reply_markup=kb.get_start_kb(is_admin),
-                parse_mode='HTML'
-            )
-        else:
-            # Нет подписки — ограниченное меню
-            await message.answer(
-                '<b>Привет! Я математический бот Math Tutor 🤖</b>\n\n'
-                '🔒 <b>Для использования бота необходима подписка.</b>\n\n'
-                'Доступные разделы без подписки:\n'
-                '• 📝 Услуги\n'
-                '• 👤 Личное (профиль, кошелёк)\n\n'
-                'Для того чтобы ознакомиться со всеми функциями бота, нажмите /help\n\n'
-                'Чтобы получить полный доступ нажмите кнопку ниже и оплатите подписку.',
-                reply_markup=kb.get_locked_kb(is_admin),
-                parse_mode='HTML'
-            )
-    else:
-        await state.clear()
-        await state.set_state(RegStates.knrtu_login)
-        await message.answer(
-            "👋 <b>Добро пожаловать!</b>\n\n"
-            "Введите ваш <b>логин от КНИТУ ONE</b>:",
-            parse_mode='HTML'
+    try:
+        user_id = message.from_user.id
+    
+        await message.answer_sticker(
+            sticker="CAACAgIAAxkBAAFIA0Jp7AYki2CLo0TD6BaStdXYgzwY4wACjqYAAhbBYEv09LioO_p4xTsE"
         )
+    
+        already = await is_registered(user_id)
+    
+        if already:
+            await state.clear()
+            is_admin = user_id in ADMIN_IDS
+            has_sub = await has_active_subscription(user_id)
+    
+            if has_sub or is_admin:
+                # Полный доступ
+                await message.answer(
+                    '👋 <b>Добро пожаловать в Math Tutor!</b>\n\n'
+                        '🤖 Я помогу тебе с математикой, прослежу за твоим расписанием '
+                        'и автоматически отмечу тебя на парах.\n\n'
+                        '👇 Выбери раздел:',
+                    reply_markup=kb.get_start_kb(is_admin),
+                    parse_mode='HTML'
+                )
+            else:
+                # Нет подписки — ограниченное меню
+                await message.answer(
+                    '<b>Привет! Я математический бот Math Tutor 🤖</b>\n\n'
+                    '🔒 <b>Для использования бота необходима подписка.</b>\n\n'
+                    'Доступные разделы без подписки:\n'
+                    '• 📝 Услуги\n'
+                    '• 👤 Личное (профиль, кошелёк)\n\n'
+                    'Для того чтобы ознакомиться со всеми функциями бота, нажмите /help\n\n'
+                    'Чтобы получить полный доступ нажмите кнопку ниже и оплатите подписку.',
+                    reply_markup=kb.get_locked_kb(is_admin),
+                    parse_mode='HTML'
+                )
+        else:
+            await state.clear()
+            await state.set_state(RegStates.knrtu_login)
+            await message.answer(
+                "👋 <b>Добро пожаловать!</b>\n\n"
+                "Введите ваш <b>логин от КНИТУ ONE</b>:",
+                parse_mode='HTML'
+            )
+    except TelegramBadRequest as e:
+        if "chat not found" in str(e):
+            return  # пользователь недоступен, игнорируем
+        raise  # остальные ошибки пробрасываем дальше
 
 
 # ========================
