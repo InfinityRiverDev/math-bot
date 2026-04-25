@@ -145,56 +145,59 @@ def hash_password(password: str) -> str:
 
 @router.message(CommandStart())
 async def cmd_start(message: Message, state: FSMContext):
-    try:
-        user_id = message.from_user.id
+    import logging
+    logger = logging.getLogger(__name__)
     
+    user_id = message.from_user.id
+    logger.info(f"Start from user {user_id}")
+    
+    try:
         await message.answer_sticker(
             sticker="CAACAgIAAxkBAAFIA0Jp7AYki2CLo0TD6BaStdXYgzwY4wACjqYAAhbBYEv09LioO_p4xTsE"
         )
+    except Exception as e:
+        logger.warning(f"Sticker failed: {e}")
     
-        already = await is_registered(user_id)
-    
-        if already:
-            await state.clear()
-            is_admin = user_id in ADMIN_IDS
-            has_sub = await has_active_subscription(user_id)
-    
-            if has_sub or is_admin:
-                # Полный доступ
-                await message.answer(
-                    '👋 <b>Добро пожаловать в Math Tutor!</b>\n\n'
-                        '🤖 Я помогу тебе с математикой, прослежу за твоим расписанием '
-                        'и автоматически отмечу тебя на парах.\n\n'
-                        '👇 Выбери раздел:',
-                    reply_markup=kb.get_start_kb(is_admin),
-                    parse_mode='HTML'
-                )
-            else:
-                # Нет подписки — ограниченное меню
-                await message.answer(
-                    '<b>Привет! Я математический бот Math Tutor 🤖</b>\n\n'
-                    '🔒 <b>Для использования бота необходима подписка.</b>\n\n'
-                    'Доступные разделы без подписки:\n'
-                    '• 📝 Услуги\n'
-                    '• 👤 Личное (профиль, кошелёк)\n\n'
-                    'Для того чтобы ознакомиться со всеми функциями бота, нажмите /help\n\n'
-                    'Чтобы получить полный доступ нажмите кнопку ниже и оплатите подписку.',
-                    reply_markup=kb.get_locked_kb(is_admin),
-                    parse_mode='HTML'
-                )
-        else:
-            await state.clear()
-            await state.set_state(RegStates.knrtu_login)
+    already = await is_registered(user_id)
+    logger.info(f"User {user_id} registered: {already}")
+
+    if already:
+        await state.clear()
+        is_admin = user_id in ADMIN_IDS
+        has_sub = await has_active_subscription(user_id)
+        logger.info(f"User {user_id} admin: {is_admin}, sub: {has_sub}")
+
+        if has_sub or is_admin:
             await message.answer(
-                "👋 <b>Добро пожаловать!</b>\n\n"
-                "Введите ваш <b>логин от КНИТУ ONE</b>:",
+                '👋 <b>Добро пожаловать в Math Tutor!</b>\n\n'
+                    '🤖 Я помогу тебе с математикой, прослежу за твоим расписанием '
+                    'и автоматически отмечу тебя на парах.\n\n'
+                    '👇 Выбери раздел:',
+                reply_markup=kb.get_start_kb(is_admin),
                 parse_mode='HTML'
             )
-    except TelegramBadRequest as e:
-        if "chat not found" in str(e):
-            return  # пользователь недоступен, игнорируем
-        raise  # остальные ошибки пробрасываем дальше
-
+        else:
+            await message.answer(
+                '<b>Привет! Я математический бот Math Tutor 🤖</b>\n\n'
+                '🔒 <b>Для использования бота необходима подписка.</b>\n\n'
+                'Доступные разделы без подписки:\n'
+                '• 📝 Услуги\n'
+                '• 👤 Личное (профиль, кошелёк)\n\n'
+                'Для того чтобы ознакомиться со всеми функциями бота, нажмите /help\n\n'
+                'Чтобы получить полный доступ нажмите кнопку ниже и оплатите подписку.',
+                reply_markup=kb.get_locked_kb(is_admin),
+                parse_mode='HTML'
+            )
+    else:
+        await state.clear()
+        await state.set_state(RegStates.knrtu_login)
+        await message.answer(
+            "👋 <b>Добро пожаловать!</b>\n\n"
+            "Введите ваш <b>логин от КНИТУ ONE</b>:",
+            parse_mode='HTML'
+        )
+    
+    logger.info(f"Start handled for user {user_id}")
 
 # ========================
 # Шаг 1 — Логин
