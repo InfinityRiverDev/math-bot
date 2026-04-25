@@ -1,17 +1,12 @@
 """
 handlers/registration.py
-
-ИЗМЕНЕНИЯ:
-- get_knrtu_profile теперь тоже возвращает group_id
-- register_user_full сохраняет group_id и knrtu_password_raw (открытый пароль)
-  Это нужно для:
-  1. Расписания (нужен group_id для запроса)
-  2. Автоотметки (нужен свежий токен → нужен открытый пароль)
+...
 """
 
 import hashlib
 import re
 from aiogram import F, Router
+from aiogram.exceptions import TelegramBadRequest  # ← ДОБАВЬ ЭТУ СТРОКУ
 from aiogram.filters import CommandStart
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
@@ -21,7 +16,6 @@ from database.models import is_registered, register_user_full
 import keyboards.user_kb as kb
 from services.links import federal_law_152_fz, privacy_policy
 from handlers.admin import ADMIN_IDS
-from aiogram.exceptions import TelegramBadRequest
 
 from database.billing_models import has_active_subscription
 
