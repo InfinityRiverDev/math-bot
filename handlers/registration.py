@@ -153,7 +153,7 @@ async def cmd_start(message: Message, state: FSMContext):
     user_id = message.from_user.id
  
     await message.answer_sticker(
-        sticker="CAACAgIAAxkBAAFG28Rp2C_Ztb_y7vR48S6aglcB31K4DAACDJYAArOHwErrrolsNunyDDsE"
+        sticker="CAACAgIAAxkBAAFIA0Jp7AYki2CLo0TD6BaStdXYgzwY4wACjqYAAhbBYEv09LioO_p4xTsE"
     )
  
     already = await is_registered(user_id)
@@ -256,7 +256,7 @@ async def reg_password(message: Message, state: FSMContext):
     if not token:
         await msg.delete()
         await message.answer_sticker(
-            sticker="CAACAgIAAxkBAAFG28Zp2C_9hPj53swh8RMqy7okuP_KWAACFIwAAsPBwEovda2i4GOX4DsE"
+            sticker="CAACAgIAAxkBAAFIA1Rp7AYuKvKcZidvXUvbQ9YCdYk-WAAC3pkAAhuvYUsfJQ2t4OiE_TsE"
         )
         await message.answer("❌ Неверный логин или пароль.\nПопробуйте снова:")
         return
