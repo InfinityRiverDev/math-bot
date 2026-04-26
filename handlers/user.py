@@ -27,45 +27,31 @@ class CalculatorStates(StatesGroup):
     waiting_for_input = State()
     tutor_waiting = State()
     practice_waiting = State()
-    art_waiting = State()
+    art_waiting = State()      # ← используется
 
 
 # =============================================================
 # 🖼 ШАБЛОНЫ ПРЕЗЕНТАЦИЙ
 # =============================================================
-# Здесь меняй названия, описания и пути к файлам коллажей.
-#
-# "name"  — отображается пользователю как заголовок шаблона
-#           (должно совпадать с текстом кнопки в user_kb.py → presentation)
-# "desc"  — короткое описание, которое видит пользователь под фото
-# "file"  — путь к файлу коллажа относительно корня проекта
-#
-# Файлы коллажей положи сюда: media/presentation_templates/
-#   collage_1.jpg  ← коллаж из 1.pptx
-#   collage_2.jpg  ← коллаж из 2.pptx
-#   collage_3.jpg  ← коллаж из 3.pptx
-#   collage_4.jpg  ← коллаж из nature__2_.pptx (переименуй файл)
-# =============================================================
-
 TEMPLATES = {
     "collage_1": {
-        "name": "Шаблон 1 — [название]",       # ← МЕНЯЙ: название шаблона
-        "desc": "Описание первого шаблона",      # ← МЕНЯЙ: описание для пользователя
-        "file": "media/presentation_templates/collage_1.jpg",  # ← путь к файлу
+        "name": "Шаблон 1 — [название]",
+        "desc": "Описание первого шаблона",
+        "file": "media/presentation_templates/collage_1.jpg",
     },
     "collage_2": {
-        "name": "Шаблон 2 — [название]",        # ← МЕНЯЙ: название шаблона
-        "desc": "Описание второго шаблона",      # ← МЕНЯЙ: описание для пользователя
+        "name": "Шаблон 2 — [название]",
+        "desc": "Описание второго шаблона",
         "file": "media/presentation_templates/collage_2.jpg",
     },
     "collage_3": {
-        "name": "Шаблон 3 — [название]",        # ← МЕНЯЙ: название шаблона
-        "desc": "Описание третьего шаблона",     # ← МЕНЯЙ: описание для пользователя
+        "name": "Шаблон 3 — [название]",
+        "desc": "Описание третьего шаблона",
         "file": "media/presentation_templates/collage_3.jpg",
     },
     "collage_4": {
-        "name": "Шаблон 4 — [название]",        # ← МЕНЯЙ: название шаблона
-        "desc": "Описание четвёртого шаблона",   # ← МЕНЯЙ: описание для пользователя
+        "name": "Шаблон 4 — [название]",
+        "desc": "Описание четвёртого шаблона",
         "file": "media/presentation_templates/collage_4.jpg",
     },
 }
@@ -114,14 +100,67 @@ async def cmd_practice(callback: CallbackQuery, state: FSMContext):
         parse_mode='HTML'
     )
 
-@router.callback_query(F.data == 'ai_additional_functions')
-async def cmd_ai_additional_functions(callback: CallbackQuery, state: FSMContext):
+
+# ========================
+# 🎨 Генерация картинок — вход
+# ========================
+@router.callback_query(F.data == 'ai_art')
+async def open_art_mode(callback: CallbackQuery, state: FSMContext):
     await callback.answer()
+    await state.set_state(CalculatorStates.art_waiting)
+    await state.update_data(current_task=None, cancelled=False)
     await callback.message.edit_text(
-        'Выберите:',
-        reply_markup=kb.ai_additional_functions,
+        '🎨 <b>Генерация картинок</b>\n\n'
+        'Опиши, что хочешь нарисовать, — ИИ создаст изображение.\n\n'
+        '<i>Примеры запросов:</i>\n'
+        '<code>кот в космосе, масляная живопись</code>\n'
+        '<code>закат над горами, аниме стиль</code>\n\n'
+        'Генерация занимает 15–30 секунд.\n'
+        'Для выхода напиши /cancel',
         parse_mode='HTML'
     )
+
+
+# ========================
+# 🎨 Генерация картинок — приём текста
+# ========================
+@router.message(CalculatorStates.art_waiting, F.text)
+async def art_generate_handler(message: Message, state: FSMContext, bot: Bot):
+    prompt = message.text.strip()
+    if not prompt:
+        await message.answer("❌ Введи описание картинки.")
+        return
+
+    msg = await message.answer("🎨 <b>Генерирую изображение...</b>\n<i>Это может занять до 30 секунд</i>", parse_mode='HTML')
+
+    try:
+        from services.yandex_art import generate_image
+        image_bytes = await generate_image(prompt)
+    except Exception as e:
+        await msg.edit_text(f"❌ Ошибка при генерации: {str(e)}")
+        return
+
+    if image_bytes is None:
+        await msg.edit_text("❌ Не удалось создать картинку. Попробуй другой запрос.")
+        return
+
+    # Отправляем фото
+    try:
+        from aiogram.types import BufferedInputFile
+        photo = BufferedInputFile(image_bytes, filename="art.png")
+        await bot.send_photo(
+            message.from_user.id,
+            photo=photo,
+            caption=f'🎨 <b>Сгенерировано по запросу:</b>\n<code>{prompt[:200]}</code>',
+            parse_mode='HTML'
+        )
+        await msg.delete()
+    except Exception as e:
+        await msg.edit_text(f"❌ Не удалось отправить картинку: {str(e)}")
+
+    # Начисляем XP
+    await give_xp(bot, message.from_user.id, "art_generated")
+    await log_activity(message.from_user.id, "calc")   # или можно добавить отдельный action "art"
 
 
 # ========================
