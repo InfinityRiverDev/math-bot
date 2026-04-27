@@ -26,7 +26,7 @@ load_dotenv()
 TOKEN        = os.getenv("TOKEN")
 PROXY        = os.getenv("PROXY")
 WEBHOOK_PORT = int(os.getenv("PORT", 8080))
-WEBHOOK_HOST = os.getenv("RENDER_EXTERNAL_URL", "")  # Render сам ставит эту переменную
+WEBHOOK_HOST = "https://app.kstubot.ru"
 WEBHOOK_PATH = "/webhook"
 WEBHOOK_URL  = f"{WEBHOOK_HOST}{WEBHOOK_PATH}"
 
