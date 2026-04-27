@@ -174,7 +174,6 @@ admin_panel_main = InlineKeyboardMarkup(inline_keyboard=[
     [InlineKeyboardButton(text="📢 Рассылка",            callback_data="admin_broadcast")],
     [InlineKeyboardButton(text="👤 Пользователи",        callback_data="admin_users_menu")],
     [InlineKeyboardButton(text="💬 Групповой чат",       callback_data="admin_group_chat")],
-    [InlineKeyboardButton(text="⚠️ Самоликвидация",      callback_data="self_destruction")],
     [InlineKeyboardButton(text="⬅️ Назад",               callback_data="back_to_main")]
 ])
 
@@ -199,7 +198,6 @@ admin_panel = InlineKeyboardMarkup(inline_keyboard=[
     [InlineKeyboardButton(text="👤 Пользователи",        callback_data="admin_users_menu")],
     [InlineKeyboardButton(text="💬 Групповой чат",       callback_data="admin_group_chat")],
     [InlineKeyboardButton(text="💰 Финансы",             callback_data="admin_profit")],
-    [InlineKeyboardButton(text="⚠️ Самоликвидация",      callback_data="self_destruction")],
     [InlineKeyboardButton(text="⬅️ Назад",               callback_data="back_to_main")]
 ])
 

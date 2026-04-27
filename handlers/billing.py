@@ -850,7 +850,8 @@ async def wallet_withdraw(callback: CallbackQuery):
     await callback.message.edit_text(
         "📤 <b>Вывод средств</b>\n\n"
         "Для вывода средств с кошелька обратитесь к администратору:\n"
-        "@admin_username",  # ← замените на реальный юзернейм
+        "@infinityriver\n"  # ← замените на реальный юзернейм
+        "P.S. Пишите сразу указав причину вывода",
         reply_markup=InlineKeyboardMarkup(inline_keyboard=[
             [InlineKeyboardButton(text="⬅️ Назад", callback_data="wallet_view")]
         ]),
