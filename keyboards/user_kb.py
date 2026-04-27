@@ -146,7 +146,7 @@ personal = InlineKeyboardMarkup(inline_keyboard=[
     [InlineKeyboardButton(text="💼 Кошелёк",    callback_data="wallet_view")],
     [InlineKeyboardButton(text="🌐 Наш сайт",   url="https://infinityriverdev.github.io/math-bot-site/")],
     [InlineKeyboardButton(text="🗣️ Отзывы", url="https://t.me/KNRTU_core_feedback")],
-    [InlineKeyboardButton(text="💬 Поддержка", url="https://t.me/udhdhduduuwu")],
+    [InlineKeyboardButton(text="💬 Поддержка", url="https://t.me/KNRTU_core_support")],
     [InlineKeyboardButton(text="⬅️ Назад",       callback_data="back_to_main")]
 ])
 

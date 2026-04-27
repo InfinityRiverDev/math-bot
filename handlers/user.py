@@ -431,8 +431,8 @@ async def open_tutor(callback: CallbackQuery, state: FSMContext):
     await state.set_state(CalculatorStates.tutor_waiting)
     await state.update_data(current_task=None, cancelled=False)
     await callback.message.edit_text(
-        '🎓 <b>ИИ-репетитор по математике</b>\n\n'
-        'Я помогу разобраться с любой математической темой!\n\n'
+        '🎓 <b>ИИ-репетитор по всем предметам</b>\n\n'
+        'Я помогу разобраться с любой темой!\n\n'
         '✏️ <b>Текстом</b> — задай вопрос по теме\n'
         '📷 <b>Фото</b> — пришли страницу из учебника\n'
         '🎤 <b>Голосовым</b> — задай вопрос голосом\n'

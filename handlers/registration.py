@@ -170,7 +170,7 @@ async def cmd_start(message: Message, state: FSMContext):
         if has_sub or is_admin:
             await message.answer(
                 '👋 <b>Добро пожаловать в KNRTU core BOT!</b>\n\n'
-                    '🤖 Я помогу тебе с математикой, прослежу за твоим расписанием '
+                    '🤖 Я помогу тебе с учебой, прослежу за твоим расписанием '
                     'и автоматически отмечу тебя на парах.\n\n'
                     '👇 Выбери раздел:',
                 reply_markup=kb.get_start_kb(is_admin),
@@ -178,7 +178,7 @@ async def cmd_start(message: Message, state: FSMContext):
             )
         else:
             await message.answer(
-                '<b>Привет! Я математический бот KNRTU core 🤖</b>\n\n'
+                '<b>Привет! Я студенческий бот KNRTU core 🤖</b>\n\n'
                 '🔒 <b>Для использования бота необходима подписка.</b>\n\n'
                 'Доступные разделы без подписки:\n'
                 '• 📝 Услуги\n'
