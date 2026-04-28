@@ -599,7 +599,16 @@ async def topup_amount_received(message: Message, state: FSMContext, bot: Bot):
         return
 
     # Сохраняем в БД как pending
-    await save_payment(user_id, payment_id, amount, "pending")
+    await save_payment(
+        user_id=user_id,
+        payment_id=payment_id,
+        amount=amount,
+        status="pending",
+        payment_type="yookassa",
+        original_amount=amount,
+        currency="RUB",
+        rate=1.0
+    )
 
     pay_kb = InlineKeyboardMarkup(inline_keyboard=[
         [InlineKeyboardButton(text="💳 Оплатить", url=payment_url)],
@@ -896,7 +905,7 @@ async def create_yookassa_payment(amount: float, payment_id: str, description: s
 # ЮKassa Webhook (aiohttp handler)
 # ===========================
 
-async def yookassa_webhook(request: web.Request, bot: Bot) -> web.Response:
+async def yookassa_webhook(request: web.Request) -> web.Response:
     """
     POST /yookassa/webhook
     Принимает уведомления от ЮKassa о статусе платежей.
