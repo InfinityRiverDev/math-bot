@@ -151,13 +151,6 @@ async def cmd_start(message: Message, state: FSMContext):
     user_id = message.from_user.id
     logger.info(f"Start from user {user_id}")
     
-    try:
-        await message.answer_sticker(
-            sticker="CAACAgIAAxkBAAFIA0Jp7AYki2CLo0TD6BaStdXYgzwY4wACjqYAAhbBYEv09LioO_p4xTsE"
-        )
-    except Exception as e:
-        logger.warning(f"Sticker failed: {e}")
-    
     already = await is_registered(user_id)
     logger.info(f"User {user_id} registered: {already}")
 
