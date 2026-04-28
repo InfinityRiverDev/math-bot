@@ -76,11 +76,22 @@ async def on_startup(bot: Bot):
     )
     #await set_commands(bot)
     logging.info(f"✅ Webhook установлен: {WEBHOOK_URL}")
+    asyncio.create_task(keepalive())
 
 
 async def on_shutdown(bot: Bot):
     await bot.delete_webhook()
     logging.info("Webhook удалён")
+
+async def keepalive():
+    """Пингуем MongoDB каждые 3 минуты чтобы соединение не умирало."""
+    from database.mongo import db
+    while True:
+        try:
+            await db.command("ping")
+        except Exception:
+            pass
+        await asyncio.sleep(180)  # 3 минуты
 
 
 async def main():
