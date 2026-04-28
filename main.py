@@ -105,10 +105,8 @@ async def main():
     app = web.Application()
     app["bot"] = bot
 
-    # Webhook для Telegram
     SimpleRequestHandler(dispatcher=dp, bot=bot).register(app, path=WEBHOOK_PATH)
 
-    # YooKassa webhook и healthcheck
     app.router.add_post("/yookassa/webhook", yookassa_webhook)
     app.router.add_get("/health", lambda r: web.Response(text="ok"))
 
@@ -121,10 +119,14 @@ async def main():
 
     runner = web.AppRunner(app)
     await runner.setup()
-    await web.TCPSite(runner, host="0.0.0.0", port=WEBHOOK_PORT).start()
+    site = web.TCPSite(runner, host="0.0.0.0", port=WEBHOOK_PORT,
+                       reuse_address=True, reuse_port=True)
+    await site.start()
 
-    # Держим процесс живым
-    await asyncio.Event().wait()
+    try:
+        await asyncio.Event().wait()
+    finally:
+        await runner.cleanup()
 
 
 if __name__ == "__main__":
