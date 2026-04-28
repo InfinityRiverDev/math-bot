@@ -74,7 +74,7 @@ async def on_startup(bot: Bot):
         url=WEBHOOK_URL,
         allowed_updates=["message", "callback_query", "my_chat_member", "chat_member"]
     )
-    await set_commands(bot)
+    #await set_commands(bot)
     logging.info(f"✅ Webhook установлен: {WEBHOOK_URL}")
 
 
