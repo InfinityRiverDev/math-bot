@@ -161,6 +161,7 @@ async def cmd_start(message: Message, state: FSMContext):
         logger.info(f"User {user_id} admin: {is_admin}, sub: {has_sub}")
 
         if has_sub or is_admin:
+            await message.answer_sticker("CAACAgIAAxkBAAFIA0Jp7AYki2CLo0TD6BaStdXYgzwY4wACjqYAAhbBYEv09LioO_p4xTsE")
             await message.answer(
                 '👋 <b>Добро пожаловать в KNRTU core BOT!</b>\n\n'
                     '🤖 Я помогу тебе с учебой, прослежу за твоим расписанием '
@@ -170,6 +171,7 @@ async def cmd_start(message: Message, state: FSMContext):
                 parse_mode='HTML'
             )
         else:
+            await message.answer_sticker("CAACAgIAAxkBAAFIA0Jp7AYki2CLo0TD6BaStdXYgzwY4wACjqYAAhbBYEv09LioO_p4xTsE")
             await message.answer(
                 '<b>Привет! Я студенческий бот KNRTU core 🤖</b>\n\n'
                 '🔒 <b>Для использования бота необходима подписка.</b>\n\n'
