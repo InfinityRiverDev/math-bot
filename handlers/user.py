@@ -35,23 +35,23 @@ class CalculatorStates(StatesGroup):
 # =============================================================
 TEMPLATES = {
     "collage_1": {
-        "name": "Шаблон 1 — [название]",
-        "desc": "Описание первого шаблона",
+        "name": "Шаблон 1",
+        "desc": "Классический академический шаблон.",
         "file": "media/presentation_templates/collage_1.jpg",
     },
     "collage_2": {
-        "name": "Шаблон 2 — [название]",
-        "desc": "Описание второго шаблона",
+        "name": "Шаблон 2",
+        "desc": "ОСовременный минималистичный IT-стиль.",
         "file": "media/presentation_templates/collage_2.jpg",
     },
     "collage_3": {
-        "name": "Шаблон 3 — [название]",
-        "desc": "Описание третьего шаблона",
+        "name": "Шаблон 3",
+        "desc": "Яркий и наглядный шаблон с инфографикой.",
         "file": "media/presentation_templates/collage_3.jpg",
     },
     "collage_4": {
-        "name": "Шаблон 4 — [название]",
-        "desc": "Описание четвёртого шаблона",
+        "name": "Шаблон 4",
+        "desc": "Визуальный, «воздушный» шаблон с красивыми фото природы.",
         "file": "media/presentation_templates/collage_4.jpg",
     },
 }
