@@ -41,7 +41,7 @@ TEMPLATES = {
     },
     "collage_2": {
         "name": "Шаблон 2",
-        "desc": "ОСовременный минималистичный IT-стиль.",
+        "desc": "Современный минималистичный IT-стиль.",
         "file": "media/presentation_templates/collage_2.jpg",
     },
     "collage_3": {

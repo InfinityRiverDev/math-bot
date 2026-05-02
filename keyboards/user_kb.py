@@ -130,10 +130,10 @@ paid_works = InlineKeyboardMarkup(inline_keyboard=[
 #    потому что именно оно передаётся в ссылку заказа.
 # =============================================================
 presentation = InlineKeyboardMarkup(inline_keyboard=[
-    [InlineKeyboardButton(text="🖼 Шаблон 1 — [название]", callback_data="collage_1")],  # ← МЕНЯЙ text=
-    [InlineKeyboardButton(text="🖼 Шаблон 2 — [название]", callback_data="collage_2")],  # ← МЕНЯЙ text=
-    [InlineKeyboardButton(text="🖼 Шаблон 3 — [название]", callback_data="collage_3")],  # ← МЕНЯЙ text=
-    [InlineKeyboardButton(text="🖼 Шаблон 4 — [название]", callback_data="collage_4")],  # ← МЕНЯЙ text=
+    [InlineKeyboardButton(text="🖼 Шаблон 1", callback_data="collage_1")],  # ← МЕНЯЙ text=
+    [InlineKeyboardButton(text="🖼 Шаблон 2", callback_data="collage_2")],  # ← МЕНЯЙ text=
+    [InlineKeyboardButton(text="🖼 Шаблон 3", callback_data="collage_3")],  # ← МЕНЯЙ text=
+    [InlineKeyboardButton(text="🖼 Шаблон 4", callback_data="collage_4")],  # ← МЕНЯЙ text=
     [InlineKeyboardButton(text="⬅️ Назад", callback_data="backward_to_paid_works")]
 ])
 
