@@ -16,9 +16,6 @@ from aiogram.types import (
     BufferedInputFile,
 )
 from aiogram.exceptions import TelegramBadRequest
-from database.stats_models import get_trial_users
-
-from handlers.admin import ADMIN_IDS
 from database.stats_models import (
     stats_users, stats_finance, stats_activity,
     stats_top_xp, stats_registrations_chart, get_full_stats,
@@ -26,6 +23,7 @@ from database.stats_models import (
 from database.billing_models import get_all_plan_purchases, get_all_promo_usage
 from database.models import get_user_profile
 
+from handlers.admin import ADMIN_IDS
 
 router = Router()
 
@@ -220,19 +218,6 @@ async def stats_show_finance(callback: CallbackQuery):
     else:
         promo_users = "\n🎟 Нет использований\n"
 
-        # 🎁 trial
-    trial_users = await get_trial_users()
-
-    trial_text = "\n🎁 <b>Пробный период:</b>\n"
-
-    if trial_users:
-        for t in trial_users[-10:]:
-            user = await get_user_profile(t["user_id"])
-            username = user.get("username", "—") if user else "—"
-            trial_text += f"  • @{username} ({t['user_id']})\n"
-    else:
-        trial_text += "  Нет пользователей\n"
-
     text = (
         "💰 <b>Финансы</b>\n"
         "━━━━━━━━━━━━━━━━━━━\n\n"
@@ -254,7 +239,6 @@ async def stats_show_finance(callback: CallbackQuery):
 
         f"{purchase_users}"
         f"{promo_users}"
-        f"{trial_text}"
     )
 
     await safe_edit(callback.message, text, kb_back_with_export())
