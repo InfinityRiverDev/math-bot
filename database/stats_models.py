@@ -97,10 +97,6 @@ async def stats_finance() -> dict:
     )
 
     # Промокоды
-    promos_used = 0
-    async for p in payments.find({}):
-        pass  # промокоды фиксируются через use_promo в billing
-
     promo_stats = []
     async for promo in promo_codes.find({}):
         promo_stats.append({
@@ -235,15 +231,3 @@ async def get_full_stats() -> dict:
         "reg_chart": rc,
         "generated_at": datetime.now().strftime("%d.%m.%Y %H:%M"),
     }
-
-
-# ==================================================
-
-from database.mongo import db
-
-trial_usage = db["trial_usage"]
-
-
-async def get_trial_users():
-    cursor = trial_usage.find({})
-    return [doc async for doc in cursor]

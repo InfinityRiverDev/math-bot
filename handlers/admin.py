@@ -466,10 +466,6 @@ async def admin_promo_delete(callback: CallbackQuery):
 # 🚫 БАНЫ
 # ===========================
 
-# ===========================
-# 🚫 БАНЫ
-# ===========================
-
 import re
 from database.models import ban_user, unban_user
 
@@ -676,37 +672,6 @@ async def unban_users(message: Message, state: FSMContext, bot: Bot):
         "✅ Пользователи разбанены",
         reply_markup=kb.admin_panel
     )
-
-
-# ===========================
-# ✅ РАЗБАН
-# ===========================
-
-@router.callback_query(F.data == "admin_unban_start", F.from_user.id.in_(ADMIN_IDS))
-async def unban_start(callback: CallbackQuery, state: FSMContext):
-    await state.set_state(AdminStates.unban_ids)
-    await callback.message.edit_text("Введи ID для разбана:")
-
-
-from database.models import unban_user
-
-@router.message(AdminStates.unban_ids, F.from_user.id.in_(ADMIN_IDS))
-async def unban_users(message: Message, state: FSMContext, bot: Bot):
-    import re
-
-    ids = list(set(int(x) for x in re.findall(r'\d+', message.text)))
-
-    for uid in ids:
-        await unban_user(uid)
-
-        # 🔥 уведомление
-        try:
-            await bot.send_message(uid, "✅ <b>Вы были разблокированы</b>", parse_mode='HTML')
-        except:
-            pass
-
-    await state.clear()
-    await message.answer("✅ Пользователи разбанены", reply_markup=kb.admin_panel)
 
 
 # ===========================
@@ -935,8 +900,6 @@ async def noop_handler(callback: CallbackQuery):
 
 # ============================================================
 # Групповой чат — управление (вкл/выкл)
-# Добавьте кнопку в admin_panel в user_kb.py:
-# [InlineKeyboardButton(text="🤖 Групповой чат", callback_data="admin_group_chat")]
 # ============================================================
 from handlers.group_chat import set_group_chat_enabled, is_group_chat_enabled, group_settings
  

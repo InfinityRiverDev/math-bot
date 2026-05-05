@@ -43,7 +43,6 @@ ALLOWED_CALLBACKS = {
     "wallet_buy_plan",
     "wallet_withdraw",
     "noop",
-    "trial_activate",
 }
 
 # Префиксы callback, разрешённые без подписки
@@ -113,10 +112,6 @@ class SubscriptionMiddleware(BaseMiddleware):
         has_sub = await has_active_subscription(user_id)
         if has_sub:
             return await handler(event, data)
-
-        if isinstance(event, CallbackQuery):
-            if event.data == "trial_activate":
-                return await handler(event, data)
 
         # ─── Нет подписки ───────────────────────────────────────────
 

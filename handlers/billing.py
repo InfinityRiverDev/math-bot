@@ -31,7 +31,7 @@ from aiogram.types import (
 )
 from aiohttp import web
 from dotenv import load_dotenv
-from database.billing_models import has_used_trial, activate_trial, payments
+from database.billing_models import payments
 
 import keyboards.user_kb as kb
 from database.billing_models import (
@@ -73,7 +73,6 @@ def wallet_kb() -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(inline_keyboard=[
         [InlineKeyboardButton(text="➕ Пополнить кошелёк", callback_data="wallet_topup_select")],
         [InlineKeyboardButton(text="📦 Купить тариф", callback_data="wallet_buy_plan")],
-        [InlineKeyboardButton(text="🎁 Пробный период", callback_data="trial_activate")],
         [InlineKeyboardButton(text="📤 Вывод средств", callback_data="wallet_withdraw")],
         [InlineKeyboardButton(text="⬅️ Назад", callback_data="personal")],
     ])
@@ -958,10 +957,6 @@ async def yookassa_webhook(request: web.Request) -> web.Response:
     photo = FSInputFile("media/notifications/notification_replenishment_wallet.png")
     if bot:
         try:
-            # await bot.send_sticker(
-            #     chat_id=user_id,
-            #     sticker="CAACAgIAAxkBAAFG27Vp2C6_dKdMZFcMIaLXlAtVzhYQTQACqpUAAkaOwUqS3PLOvG5XhTsE"
-            # )
             await bot.send_photo(
                 user_id,
                 photo=photo,
@@ -973,38 +968,3 @@ async def yookassa_webhook(request: web.Request) -> web.Response:
             print(f"Webhook notify error: {e}")
 
     return web.Response(status=200)
-
-
-# =============================================
-
-@router.callback_query(F.data == "trial_activate")
-async def trial_activate_handler(callback: CallbackQuery):
-    user_id = callback.from_user.id
-
-    from database.billing_models import (
-        has_used_trial,
-        activate_trial,
-        has_real_subscription
-    )
-
-    # ❌ Уже есть активная подписка
-    if await has_real_subscription(user_id):
-        await callback.answer("❌ У тебя уже есть активная подписка", show_alert=True)
-        return
-
-    # ❌ Уже использовал trial
-    if await has_used_trial(user_id):
-        await callback.answer("❌ Вы уже активировали пробный период ранее", show_alert=True)
-        return
-
-    # ✅ Активируем trial
-    await activate_trial(user_id)
-
-    await callback.message.edit_text(
-        "🎉 <b>Пробный период активирован!</b>\n\n"
-        "⏳ Доступ на <b>2 дня</b>\n"
-        "После этого потребуется подписка.",
-        parse_mode='HTML'
-    )
-
-    await callback.answer()
